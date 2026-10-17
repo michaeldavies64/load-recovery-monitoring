@@ -1,0 +1,24 @@
+# RStudio
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Raw Vizathon files: downloaded by scr/01_download_data.R, never committed
+input/*
+!input/.gitkeep
+
+# Built by the pipeline, rebuilt from one command
+data/*
+!data/.gitkeep
+_targets/
+*.duckdb
+*.duckdb.wal
+
+# Deployment records (account details)
+rsconnect/
+
+# Quarto render leftovers
+docs/*_files/
+.quarto/
+
