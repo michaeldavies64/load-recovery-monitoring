@@ -6,7 +6,7 @@ server_profile <- function(id, data) {
     d <- profile_data(data)
 
     # Fill the controls' choices (the page is built before the data is ready)
-    shiny::updateCheckboxGroupInput(session, "metrics", choices = d$status_choices, selected = d$status_choices)
+    shiny::updateCheckboxGroupInput(session, "metrics", choices = d$status_choices, selected = d$status_default)
     shiny::updateSelectInput(session, "type_metric", choices = d$type_choices, selected = "distance")
     shiny::updateRadioButtons(session, "season", choices = d$seasons, selected = d$seasons[1], inline = TRUE)
 

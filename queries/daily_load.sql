@@ -84,6 +84,12 @@ SELECT
   CASE WHEN g.distance > 0 THEN g.hr_zone_4_min        END         AS hr_zone_4_min,
   CASE WHEN g.distance > 0 THEN g.hr_zone_5_min        END         AS hr_zone_5_min,
 
+  -- Heart-rate time in two bands: yellow is 50-80% of max HR (zones 1 to 3) and red is
+  -- 80-100% (zones 4 and 5). The zones don't overlap, so they can be added. Time below
+  -- 50% of max HR is not recorded, so yellow is not all the time below 80%.
+  CASE WHEN g.distance > 0 THEN g.hr_zone_1_min + g.hr_zone_2_min + g.hr_zone_3_min END AS hr_yellow_min,
+  CASE WHEN g.distance > 0 THEN g.hr_zone_4_min + g.hr_zone_5_min                   END AS hr_red_min,
+
   -- Per-minute values: intensity rather than volume. Duration may include time outside
   -- the session itself (such as warm-ups), so these understate true intensity, but they
   -- are consistent across the data.

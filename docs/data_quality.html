@@ -2254,6 +2254,20 @@ vertical-align: -.125em;
 </tr>
 <tr class="even">
 <td style="text-align: left;">GPS</td>
+<td style="text-align: left;">Speed distances are nested (&gt;21 includes &gt;24 and &gt;27 km/h)</td>
+<td style="text-align: left;">91 of 721</td>
+<td style="text-align: left;"><span class="status note">Note</span></td>
+<td style="text-align: left;">Each threshold should include the faster ones, but in these sessions a faster band is larger than a slower one, most likely a sign of simulation. Use each band as supplied, and don&#39;t work out distance between thresholds (such as 21-24 km/h) by subtraction.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">GPS</td>
+<td style="text-align: left;">Effort counts are nested (&gt;2.5 includes &gt;3.5 and &gt;4.5 m/s²)</td>
+<td style="text-align: left;">3 of 721</td>
+<td style="text-align: left;"><span class="status note">Note</span></td>
+<td style="text-align: left;">The &gt;2.5 count already includes the harder efforts, so it is the total; adding the three bands would count the hardest efforts more than once.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">GPS</td>
 <td style="text-align: left;">Heart rate time fits within session duration</td>
 <td style="text-align: left;">13 of 721</td>
 <td style="text-align: left;"><span class="status note">Note</span></td>
@@ -2289,7 +2303,7 @@ vertical-align: -.125em;
 </tr>
 <tr class="odd">
 <td style="text-align: left;">Capability</td>
-<td style="text-align: left;">Scores outside 0<u+2013>100%</u+2013></td>
+<td style="text-align: left;">Scores outside 0–100%</td>
 <td style="text-align: left;">389 of 9,839</td>
 <td style="text-align: left;"><span class="status note">Note</span></td>
 <td style="text-align: left;">Benchmark scores can exceed 100% or fall below 0, so they are relative scores rather than percentiles. Do not cap them.</td>

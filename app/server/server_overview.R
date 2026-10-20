@@ -62,7 +62,7 @@ server_overview <- function(id, data, nav_session, selected_date) {
           htmltools::p(class = "md-subhead", "Total distance each day"),
           daily_bars(d$last28, value_label = function(v) fmt_value(v / 1000, 1, "km"),
                      onclick = function(date) js_set_input(ns("pick_date"), format(date)))),
-        ns("go_load"), "See load over time")
+        ns("go_load"), "See the longitudinal view")
     })
 
     go <- function(page) bslib::nav_select("main_nav", page, session = nav_session)

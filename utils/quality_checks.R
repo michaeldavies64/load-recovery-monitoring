@@ -18,6 +18,9 @@ check_gps_quality <- function(gps) {
   n_zero_match <- sum(gps$distance == 0 & gps$md_plus_code == 0)
   n_hr <- sum(hr_min > sessions$day_duration * 1.1)
   n_frac <- sum(sessions$accel_decel_over_2_5 %% 1 != 0)
+  # Thresholds should be nested: distance over 21 km/h includes the distance over 24 and 27
+  n_speed <- sum(sessions$distance_over_21 < sessions$distance_over_24 | sessions$distance_over_24 < sessions$distance_over_27)
+  n_effort <- sum(sessions$accel_decel_over_2_5 < sessions$accel_decel_over_3_5 | sessions$accel_decel_over_3_5 < sessions$accel_decel_over_4_5)
   gaps <- as.numeric(diff(gps$date))
 
   dplyr::bind_rows(
@@ -26,6 +29,8 @@ check_gps_quality <- function(gps) {
     check("GPS", "Days with no session recorded", n_zero, nrow(gps), "Note", "Every calendar day has a row; days off are rows of zeros, not missing rows. Exclude them from averages."),
     check("GPS", "Match days with no data", n_zero_match, sum(gps$md_plus_code == 0), pass_if_zero(n_zero_match, "Note"), "All three fall in a 29-day block of zeros from 14 March 2025, which suggests a period of unavailability rather than errors."),
     check("GPS", "Effort counts are whole numbers", n_frac, nrow(sessions), pass_if_zero(n_frac, "Note"), "Counts are fractional, a sign of simulation. Round for display only."),
+    check("GPS", "Speed distances are nested (>21 includes >24 and >27 km/h)", n_speed, nrow(sessions), pass_if_zero(n_speed, "Note"), "Each threshold should include the faster ones, but in these sessions a faster band is larger than a slower one, most likely a sign of simulation. Use each band as supplied, and don't work out distance between thresholds (such as 21-24 km/h) by subtraction."),
+    check("GPS", "Effort counts are nested (>2.5 includes >3.5 and >4.5 m/s\u00b2)", n_effort, nrow(sessions), pass_if_zero(n_effort, "Note"), "The >2.5 count already includes the harder efforts, so it is the total; adding the three bands would count the hardest efforts more than once."),
     check("GPS", "Heart rate time fits within session duration", n_hr, nrow(sessions), pass_if_zero(n_hr, "Note"), "Time in HR zones exceeds session duration by more than 10% in a few sessions, most likely because the GPS session was clipped to the training period while heart rate kept recording. Use duration from GPS and treat HR zone time in these sessions with caution."),
     check("GPS", "Continuous daily coverage in season", sum(gaps > 1), length(gaps), "Note", "Daily from 1 August to 31 May each season; June and July are absent, so there is no GPS pre-season data. Pre-season appears only in the capability and recovery files.")
   )

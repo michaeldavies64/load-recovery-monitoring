@@ -20,6 +20,7 @@ WITH long AS (
       accel_decel_over_2_5, accel_decel_over_3_5, accel_decel_over_4_5,
       day_duration, peak_speed,
       hr_zone_1_min, hr_zone_2_min, hr_zone_3_min, hr_zone_4_min, hr_zone_5_min,
+      hr_yellow_min, hr_red_min,
       distance_per_min, distance_over_21_per_min, distance_over_24_per_min, distance_over_27_per_min,
       accel_decel_over_2_5_per_min, accel_decel_over_3_5_per_min, accel_decel_over_4_5_per_min
     )

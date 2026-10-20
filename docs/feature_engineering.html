@@ -2153,6 +2153,7 @@ vertical-align: -.125em;
   <li><a href="#md-5" id="toc-md-5" class="nav-link" data-scroll-target="#md-5">MD-5</a></li>
   <li><a href="#match-day-duration-band" id="toc-match-day-duration-band" class="nav-link" data-scroll-target="#match-day-duration-band">Match-day duration band</a></li>
   <li><a href="#per-minute-values" id="toc-per-minute-values" class="nav-link" data-scroll-target="#per-minute-values">Per-minute values</a></li>
+  <li><a href="#heart-rate-bands" id="toc-heart-rate-bands" class="nav-link" data-scroll-target="#heart-rate-bands">Heart-rate bands</a></li>
   <li><a href="#load-baseline" id="toc-load-baseline" class="nav-link" data-scroll-target="#load-baseline">Load baseline</a></li>
   <li><a href="#recovery-baseline" id="toc-recovery-baseline" class="nav-link" data-scroll-target="#recovery-baseline">Recovery baseline</a></li>
   </ul>
@@ -2233,10 +2234,14 @@ vertical-align: -.125em;
 <td>Distance, speed bands and efforts per minute, as measures of intensity</td>
 </tr>
 <tr class="even">
+<td><a href="#heart-rate-bands">Heart-rate bands</a></td>
+<td>Yellow (50-80% of max HR, zones 1 to 3) and red (80-100%, zones 4 and 5), added as load metrics with adaptive ranges</td>
+</tr>
+<tr class="odd">
 <td><a href="#load-baseline">Load baseline</a></td>
 <td>The full 2022/2023 season</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#recovery-baseline">Recovery baseline</a></td>
 <td>August to December 2023, with at least 5 values needed for a range</td>
 </tr>
@@ -2632,6 +2637,42 @@ vertical-align: -.125em;
 </div>
 </div>
 <p><strong>Consequence.</strong> Duration may include time outside the session itself, such as warm-ups, so per-minute values understate true intensity. They are consistent across the data, so comparisons within it hold, but they should not be compared with other teams’ per-minute figures. Like the totals, they are modelled on the log scale for the adaptive ranges; the reasoning is in the adaptive ranges report.</p>
+</section>
+<section id="heart-rate-bands" class="level2">
+<h2 class="anchored" data-anchor-id="heart-rate-bands">Heart-rate bands</h2>
+<p><strong>Decision.</strong> Time in the five heart-rate zones is also added into two bands, each a load metric in its own right with an adaptive range: yellow, 50-80% of max HR (zones 1 to 3), and red, 80-100% (zones 4 and 5).</p>
+<p><strong>Why.</strong> Five zones are too many to read at a glance, and the split at 80% of max HR separates steady work from hard work. The zones don’t overlap, so their minutes can be added. In a typical session:</p>
+<div class="cell">
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small" data-quarto-postprocess="true">
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">Median minutes per session</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Minutes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Yellow (50-80%)</td>
+<td style="text-align: right;">41.7</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Red (80-100%)</td>
+<td style="text-align: right;">9.2</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">All five zones</td>
+<td style="text-align: right;">52.3</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Session duration</td>
+<td style="text-align: right;">72.9</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p><strong>Consequence.</strong> Time below 50% of max HR is not recorded, so the yellow band is not all the time below 80%, and the zones add up to less than the session’s duration. The individual zones stay in the data. The acceleration bands are not added together in the same way: they are thresholds rather than separate bins, so the &gt;2.5 m/s² count already includes the harder efforts (see the data quality report).</p>
 </section>
 <section id="load-baseline" class="level2">
 <h2 class="anchored" data-anchor-id="load-baseline">Load baseline</h2>

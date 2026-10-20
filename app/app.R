@@ -44,7 +44,7 @@ ui <- bslib::page_navbar(
   bslib::nav_panel("Overview", value = "overview", ui_overview("overview")),
   bslib::nav_panel("Profile", value = "profile",
                    ui_profile("profile")),
-  bslib::nav_panel("Load over time", value = "load", ui_placeholder("Longitudinal overview: to follow")),
+  bslib::nav_panel("Longitudinal", value = "load", ui_load("load")),
   bslib::nav_panel("Session check", value = "session", shiny::uiOutput("session_placeholder")),
   bslib::nav_panel("Glossary", value = "glossary", ui_glossary("glossary")),
   bslib::nav_spacer(),
@@ -69,6 +69,7 @@ server <- function(input, output, session) {
   server_home("home", app_data, nav_session = session, selected_player = selected_player)
   server_overview("overview", app_data, nav_session = session, selected_date = selected_date)
   server_profile("profile", app_data)
+  server_load("load", app_data, nav_session = session, selected_date = selected_date)
   server_glossary("glossary", app_data)
   session$sendCustomMessage("md-ready", TRUE)
   output$session_placeholder <- shiny::renderUI(

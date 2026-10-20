@@ -47,7 +47,8 @@ load_app_data <- function(path = db_path) {
       recovery_ranges = db_read(con, "monitoring", "recovery_ranges"),
       daily           = db_read(con, "features", "daily_load"),
       load_long       = db_read(con, "features", "load_long"),
-      load_by_type    = db_read(con, "features", "load_by_match_day")
+      load_by_type    = db_read(con, "features", "load_by_match_day"),
+      match_reference = db_read(con, "features", "match_reference")
     )
     tables$app_date <- tables$status$app_date[1]
     tables
