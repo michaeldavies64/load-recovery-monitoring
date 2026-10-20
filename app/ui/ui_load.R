@@ -1,8 +1,8 @@
 # Longitudinal page: a controls card that sets the view and period for every chart,
-# then six cards, each starting on a key metric that the user can change.
+# then seven cards, each starting on a key metric that the user can change.
 # The controls start empty; server_load() fills them once the data is ready.
 
-ui_load <- function(id, n_cards = 6) {
+ui_load <- function(id, n_cards = 7) {
   ns <- shiny::NS(id)
   preset <- function(inputId, label) shiny::actionButton(ns(inputId), label, class = "btn-sm btn-outline-secondary")
   htmltools::tagList(

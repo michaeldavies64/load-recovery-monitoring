@@ -2982,7 +2982,7 @@
   },
   "files": {
     ".Rprofile": {
-      "checksum": "cfef79ad56bb5012502d531c411e8daa"
+      "checksum": "a362e6911e3e3e78aa1f84ce0d0e33c7"
     },
     "_quarto.yml": {
       "checksum": "cafb73ff28c66cf1de7dd73d2a323c7f"
@@ -2991,22 +2991,25 @@
       "checksum": "a3d06b3159f42af57c6a0875c34c5fe1"
     },
     "app/app.R": {
-      "checksum": "d3d009a3e8c2eef8b639c223b6ed83f9"
+      "checksum": "e32a9b3d2930ae0b7054dd21b5d7f60c"
     },
     "app/data_management/formatting.R": {
       "checksum": "462389367e967fe2aca859b99e1e0643"
     },
     "app/data_management/load_app_data.R": {
-      "checksum": "a358d09cafc86c3e7430c8f4341cd82f"
+      "checksum": "7ab817be8a683fdbb728916c266cf685"
     },
     "app/data_management/page_data.R": {
-      "checksum": "2d698afde453e7c03e847418a57cb2a9"
+      "checksum": "b63199907811611bdc871deaedf050bc"
     },
     "app/data_visualisation/bar_legend.R": {
       "checksum": "bb0fa138cdd7186133fa87688a33137d"
     },
     "app/data_visualisation/daily_bars.R": {
       "checksum": "548a041629fb4cde01c8326c26e6d725"
+    },
+    "app/data_visualisation/load_chart.R": {
+      "checksum": "fcac035bf518464276b05baeab055c5c"
     },
     "app/data_visualisation/player_card.R": {
       "checksum": "b5933d0a87a8ec52cf75c338d45d2ab7"
@@ -3016,6 +3019,9 @@
     },
     "app/data_visualisation/range_bar.R": {
       "checksum": "0b50c7c433258e543ed7072188df5d1a"
+    },
+    "app/data_visualisation/session_strip.R": {
+      "checksum": "7440cd9e2d2fd4be1e4bdefdb848f42e"
     },
     "app/data_visualisation/session_type_bars.R": {
       "checksum": "47220034e3789c338ff084a19b02f2ea"
@@ -3029,11 +3035,17 @@
     "app/server/server_home.R": {
       "checksum": "d3cf782ec8ad92386371c6a17875827e"
     },
+    "app/server/server_load.R": {
+      "checksum": "732bc8d12cf580002e942a62c0cc5b20"
+    },
     "app/server/server_overview.R": {
-      "checksum": "2cdc5563330b09ff811e24b161985d1e"
+      "checksum": "4beba10f3d0a3db4f8ed0c0a60c65a48"
     },
     "app/server/server_profile.R": {
-      "checksum": "588fd572cee25b206ea2739171b95051"
+      "checksum": "7859249b4185efb5cb11f1f48600cdb2"
+    },
+    "app/server/server_session.R": {
+      "checksum": "35d672d0fe25ddbff1456d8a30a7ba0a"
     },
     "app/ui/ui_glossary.R": {
       "checksum": "de89caea7aaf8d53d637cfb60036f902"
@@ -3041,20 +3053,23 @@
     "app/ui/ui_home.R": {
       "checksum": "cdf0193e2fcd219e305ead7dc9beaead"
     },
+    "app/ui/ui_load.R": {
+      "checksum": "c364681790b45a3475cc493713e5ad75"
+    },
     "app/ui/ui_overview.R": {
       "checksum": "3a5a8cbdbc0c0f6cfd77a9fd6cb199e3"
     },
-    "app/ui/ui_placeholder.R": {
-      "checksum": "260b82759810df8c386582e60035d9fd"
-    },
     "app/ui/ui_profile.R": {
       "checksum": "1def40b5404b4d9332e34b1074f92f1b"
+    },
+    "app/ui/ui_session.R": {
+      "checksum": "4e61f862f2358c1c85cb3fe0ecf14c66"
     },
     "app/www/headshot.svg": {
       "checksum": "03966699f34b1e41d0ec566957b6d0a3"
     },
     "app/www/styles.css": {
-      "checksum": "0e3b30f0f9b73e135e5a6e81482d821a"
+      "checksum": "259e7366d26a63dd97ab69d8644ee101"
     },
     "code/build_features.R": {
       "checksum": "ebe2aaf2dd169efda796117447f88168"
@@ -3066,25 +3081,25 @@
       "checksum": "80747536198e3f1c391a524b3808c40d"
     },
     "data/load_recovery.duckdb": {
-      "checksum": "7fa90da6ea8a484757c51b4e782b1d99"
+      "checksum": "d4f9379fcc5d88394876a18239dbc036"
     },
     "docs/adaptive_ranges.html": {
-      "checksum": "337ccc929fbc88ab63e1472c4fa0a51d"
+      "checksum": "b1d7278ee6e4c3b91ee51d4de72a4e25"
     },
     "docs/adaptive_ranges.qmd": {
       "checksum": "790d68d3e385f6dee7c9dd715294491c"
     },
     "docs/data_quality.html": {
-      "checksum": "74992a4896c2f8a90add5c93d2274b1b"
+      "checksum": "88e988ddcd9dda93e0a4de5ba05b040d"
     },
     "docs/data_quality.qmd": {
       "checksum": "577591cd91ce69ae012d98e2c4481f02"
     },
     "docs/feature_engineering.html": {
-      "checksum": "1078e3d0992f3286e4340f93d9894b29"
+      "checksum": "aaedad0b92f2b89b2c168fbdc50e5b1b"
     },
     "docs/feature_engineering.qmd": {
-      "checksum": "f91f0e3bf897c8476ecab429007b77e2"
+      "checksum": "eeb4c2097dcf6943afe0bb942569e332"
     },
     "docs/md-report.scss": {
       "checksum": "c6d4d25aaea007974a74efea38f25bcd"
@@ -3105,7 +3120,7 @@
       "checksum": "9cbe969cee0c32b7c479382e7f98d3f2"
     },
     "input/reference/gps_glossary.csv": {
-      "checksum": "08f42eb83691d701de451e408197e04d"
+      "checksum": "193516055a0a92d14ddb81e8b0fd59f2"
     },
     "input/reference/player_profile.csv": {
       "checksum": "0a19cf486b54cb8eb8eb2ada1a8be2ce"
@@ -3114,13 +3129,13 @@
       "checksum": "3fd54096113c9abd7275a343c40a9476"
     },
     "queries/daily_load.sql": {
-      "checksum": "8fb29c8b8b97ff165b305a6ba1d6784d"
+      "checksum": "74df2813cdd4e4e5eac2472051d8016a"
     },
     "queries/load_by_match_day.sql": {
       "checksum": "601687bb23dfb2ccb9e684096025549f"
     },
     "queries/load_long.sql": {
-      "checksum": "d9382c04d35b37c784367713ef788fda"
+      "checksum": "3362385b0898b4ba63f1dd9e55ce803b"
     },
     "queries/match_reference.sql": {
       "checksum": "678e9dab7c3aa2e6ea75f7cca29d367b"
@@ -3153,7 +3168,7 @@
       "checksum": "f7b3fc54b4a26df745d0e5b55dc146ef"
     },
     "utils/quality_checks.R": {
-      "checksum": "4f69742f80de57c5bd5f4302e8c5081a"
+      "checksum": "d345e20b83ee67e98b9e3eda0fcb6774"
     },
     "utils/read_data.R": {
       "checksum": "d214b6977d7ec8187778d1dfac43dedd"

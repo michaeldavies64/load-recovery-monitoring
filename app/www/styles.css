@@ -204,9 +204,10 @@ html.md-loading .navbar .nav-link:not([data-value="home"]) { pointer-events: non
 .md-lt-hits { position: absolute; inset: 0; display: flex; }
 .md-lt-hit { flex: 1; min-width: 0; height: 100%; }
 .md-lt-hit:hover { background: rgba(31, 42, 55, .07); }
-.md-lt-hit[data-tip]:hover::after { bottom: auto; top: 0; transform: translateX(-50%); }
-.md-lt-hit.md-edge-l[data-tip]:hover::after { left: 0; transform: none; }
-.md-lt-hit.md-edge-r[data-tip]:hover::after { left: auto; right: 0; transform: none; }
+/* Compact tooltips beside the hovered day, so they cover as little of the chart as possible */
+.md-lt-hit[data-tip]:hover::after { bottom: auto; top: 6px; left: calc(100% + 6px); transform: none;
+  font-size: .72rem; line-height: 1.3; padding: .35rem .5rem; opacity: .95; }
+.md-lt-hit.md-edge-r[data-tip]:hover::after { left: auto; right: calc(100% + 6px); }
 .md-lt-xaxis { position: relative; height: 1.4rem; grid-column: 2; }
 .md-lt-xaxis span { position: absolute; top: .3rem; transform: translateX(-50%); white-space: nowrap; }
 .md-lt-legend { display: flex; flex-wrap: wrap; gap: .3rem 1.25rem; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--md-line); }
@@ -224,4 +225,42 @@ html.md-loading .navbar .nav-link:not([data-value="home"]) { pointer-events: non
 @media (max-width: 767.98px) { .md-lt-x-minor { display: none; } }
 @media (max-width: 991.98px) {
   .md-lt-control-card { position: static; }
+}
+/* Session check */
+.md-sc-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .75rem; }
+.md-sc-nav .form-group { margin: 0; }
+.md-sc-nav .btn svg { margin: 0 .25rem; }
+.md-sc-facts { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: .75rem 2rem; }
+.md-sc-title { font-size: 1.4rem; font-weight: 600; margin-bottom: .2rem; }
+.md-sc-facts .md-counts { margin: 0; }
+.md-sc-norange { max-width: 360px; }
+.md-ss { display: flex; flex-direction: column; gap: .4rem; }
+.md-ss-row { display: grid; grid-template-columns: minmax(170px, 260px) minmax(0, 1fr) 150px; align-items: center; gap: 1rem; padding: .45rem 0; border-bottom: 1px solid var(--md-line); }
+.md-ss-row:last-child { border-bottom: 0; }
+.md-ss-label { display: flex; justify-content: space-between; gap: .75rem; }
+.md-ss-name { font-size: .9rem; }
+.md-ss-value { font-weight: 600; white-space: nowrap; }
+.md-ss-track { position: relative; height: 22px; }
+.md-ss-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--md-line); }
+.md-ss-typical { position: absolute; top: 2px; bottom: 2px; width: 2px; margin-left: -1px; background: var(--md-signal); }
+.md-ss-dot { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--md-context); opacity: .9; }
+.md-ss-dot.md-clickable:hover { background: var(--md-ink-2); }
+.md-ss-this { width: 16px; height: 16px; margin: -8px 0 0 -8px; background: var(--md-ink); border: 2px solid #FFFFFF; box-shadow: 0 0 0 1px var(--md-ink); opacity: 1; z-index: 2; }
+.md-ss-this.md-ss-flag { background: var(--md-warning); box-shadow: 0 0 0 1px var(--md-warning); }
+.md-ss-rank { text-align: right; }
+.md-rg { display: flex; flex-direction: column; }
+.md-rg-row { display: grid; grid-template-columns: minmax(150px, 220px) repeat(3, minmax(0, 1fr)); gap: .5rem; align-items: center; padding: .35rem 0; border-bottom: 1px solid var(--md-line); }
+.md-rg-row:last-child { border-bottom: 0; }
+.md-rg-head { font-size: .8rem; font-weight: 600; color: var(--md-ink-2); }
+.md-rg-name { font-size: .9rem; }
+.md-rg-cell { display: inline-flex; align-items: baseline; gap: .4rem; justify-self: start; padding: .15rem .55rem; border-radius: 6px; font-weight: 600; font-size: .9rem; }
+.md-rg-ok { background: var(--md-raised); }
+.md-rg-plain { background: var(--md-raised); font-weight: 500; color: var(--md-ink-2); }
+.md-rg-flag { background: #FBF1DE; color: #8A5E00; }
+.md-rg-dir { font-weight: 500; font-size: .75rem; }
+.md-rg-none { color: var(--md-context); font-weight: 400; font-size: .8rem; }
+@media (max-width: 767.98px) {
+  .md-ss-row { grid-template-columns: minmax(0, 1fr); gap: .3rem; }
+  .md-ss-rank { text-align: left; }
+  .md-rg-row { grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr)); font-size: .8rem; }
 }

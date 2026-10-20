@@ -45,7 +45,7 @@ ui <- bslib::page_navbar(
   bslib::nav_panel("Profile", value = "profile",
                    ui_profile("profile")),
   bslib::nav_panel("Longitudinal", value = "load", ui_load("load")),
-  bslib::nav_panel("Session check", value = "session", shiny::uiOutput("session_placeholder")),
+  bslib::nav_panel("Session check", value = "session", ui_session("session")),
   bslib::nav_panel("Glossary", value = "glossary", ui_glossary("glossary")),
   bslib::nav_spacer(),
   bslib::nav_item(shiny::uiOutput("asof", inline = TRUE))
@@ -70,11 +70,9 @@ server <- function(input, output, session) {
   server_overview("overview", app_data, nav_session = session, selected_date = selected_date)
   server_profile("profile", app_data)
   server_load("load", app_data, nav_session = session, selected_date = selected_date)
+  server_session("session", app_data, selected_date = selected_date)
   server_glossary("glossary", app_data)
   session$sendCustomMessage("md-ready", TRUE)
-  output$session_placeholder <- shiny::renderUI(
-    ui_placeholder(paste("Session check for", fmt_date_short(selected_date()), "(page to follow)"))
-  )
 }
 
 shiny::shinyApp(ui, server)

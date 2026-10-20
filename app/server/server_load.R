@@ -1,4 +1,4 @@
-# Longitudinal page: the shared controls (view and period), and the six chart cards.
+# Longitudinal page: the shared controls (view and period), and the chart cards.
 # Clicking a session on any card opens it on the session check page.
 
 server_load <- function(id, data, nav_session, selected_date) {
@@ -95,14 +95,14 @@ server_load_card <- function(id, d, metric, view, dates, open_session) {
         }
         if (v %in% c("7d", "28d")) {
           lines <- c(lines, paste0(view_label(input$metric, v), ": ", if (is.na(r$rolling)) "not yet a full window" else fmt(r$rolling)))
-          lines <- c(lines, if (r$window_flags == 0) "No sessions outside the normal range in this window"
-                            else paste0("Sessions outside the normal range in this window: ", r$window_flags, " (", r$window_flag_list, ")"))
+          lines <- c(lines, if (r$window_flags == 0) "Outside range in this window: none"
+                            else paste0("Outside range in this window: ", r$window_flags, " (", r$window_flag_list, ")"))
         }
-        if (r$has_session) lines <- c(lines, "Click to check this session")
+        if (r$has_session) lines <- c(lines, "Click to open in session check")
         paste(lines, collapse = "\n")
       }
       if (!any(x$in_data)) return(htmltools::p(class = "md-muted", "No GPS data in this period."))
-      load_chart(x, v, tip, onclick = function(date) js_set_input(ns("pick_date"), format(date)), height = 220)
+      load_chart(x, v, tip, onclick = function(date) js_set_input(ns("pick_date"), format(date)), height = 340)
     })
 
     shiny::observeEvent(input$pick_date, open_session(input$pick_date))

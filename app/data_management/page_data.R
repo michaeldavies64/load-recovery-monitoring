@@ -124,8 +124,9 @@ load_time_data <- function(data) {
     # Grouped as in the glossary, for the metric selectors
     metric_choices = lapply(split(glossary, factor(glossary$group, levels = groups)),
                             function(g) stats::setNames(g$column_name, g$label)),
-    # The six cards and the metric each starts on
-    cards = c("distance", "distance_over_21", "distance_over_27", "accel_decel_over_2_5", "hr_yellow_min", "hr_red_min"),
+    # The cards and the metric each starts on
+    cards = c("distance", "distance_over_21", "distance_over_24", "distance_over_27", "accel_decel_over_2_5",
+              "hr_yellow_min", "hr_red_min"),
     long = long
   )
 }
@@ -209,4 +210,68 @@ load_time_summary <- function(days, metric) {
     total = switch(kind, amount = sum(s$value), max = if (nrow(s)) max(s$value) else NA, rate = if (nrow(s)) mean(s$value) else NA),
     weekly = if (kind == "amount" && n_days) sum(s$value) / n_days * 7 else NA
   )
+}
+
+# Session check page: every session's load metrics with their ranges, and the recovery
+# scores, prepared once. session_view() then picks out one session.
+session_data <- function(data) {
+  gloss <- dplyr::select(data$gps_glossary, metric = column_name, label, short_label, group, unit, decimals, display_order)
+  days <- dplyr::select(data$daily, date, match_day, is_match_day, is_full_match, day_duration, opposition_full, has_session)
+  load <- data$load_ranges |>
+    dplyr::inner_join(gloss, by = "metric") |>
+    dplyr::left_join(dplyr::select(days, date, is_full_match), by = "date")
+  recovery <- data$recovery_ranges |>
+    dplyr::inner_join(dplyr::select(data$rec_glossary, metric, label, short_label, unit, decimals, display_order), by = "metric")
+  list(
+    app_date = data$app_date,
+    session_dates = sort(unique(days$date[days$has_session & days$date <= data$app_date])),
+    days = days,
+    load = load,
+    recovery = recovery,
+    # Shown as range bars: totals, with heart rate as the yellow and red bands
+    range_metrics = gloss$metric[gloss$metric %in% load$metric & !grepl("_per_min$|^hr_zone_", gloss$metric)],
+    # Compared with recent sessions of the same type
+    key_metrics = c("distance", "distance_over_21", "distance_over_27", "accel_decel_over_2_5", "hr_yellow_min", "hr_red_min"),
+    recent_n = 10
+  )
+}
+
+# One session: its facts, its metrics against their ranges, the same metrics in recent
+# sessions of the same type, and recovery on the day and the next two days it was
+# collected (recovery is not collected on match days and often not the day after)
+session_view <- function(sd, date) {
+  day <- sd$days[sd$days$date == date, ]
+  load <- dplyr::filter(sd$load, date == !!date)
+  # Recent sessions of the same type, up to and including this one. A full match is compared
+  # with full matches; a shorter or longer match day with other match days that weren't.
+  same <- dplyr::filter(sd$load, match_day == day$match_day, date <= !!date, metric %in% sd$key_metrics)
+  if (isTRUE(day$is_match_day)) same <- dplyr::filter(same, is_full_match == day$is_full_match)
+  recent_dates <- utils::tail(sort(unique(same$date)), sd$recent_n)
+  later <- sort(unique(sd$recovery$date[sd$recovery$date > date & sd$recovery$date <= date + 7]))
+  recovery_days <- c(date, utils::head(later, 2))
+  list(
+    date = date,
+    day = day,
+    load = dplyr::filter(load, metric %in% sd$range_metrics) |> dplyr::arrange(display_order),
+    n_flag = sum(is_flag(load$status[load$metric %in% sd$range_metrics])),
+    n_assessed = sum(is_assessed(load$status[load$metric %in% sd$range_metrics])),
+    recent = dplyr::filter(same, date %in% recent_dates),
+    recent_label = if (isTRUE(day$is_match_day)) {
+      if (isTRUE(day$is_full_match)) "full matches" else "match days that weren't full matches"
+    } else paste(day$match_day, "sessions"),
+    recovery_days = recovery_days,
+    recovery_labels = sd$days$match_day[match(recovery_days, sd$days$date)],
+    recovery = dplyr::filter(sd$recovery, date %in% recovery_days) |> dplyr::arrange(display_order)
+  )
+}
+
+# "Highest", "2nd highest" ... "Lowest" of a set of values, for the value at position i
+rank_phrase <- function(values, i) {
+  r <- rank(-values, ties.method = "min")[i]
+  n <- length(values)
+  if (n == 1) return("The first of its kind")
+  if (r == 1) return("Highest")
+  if (r == n) return("Lowest")
+  suffix <- if (r %% 100 %in% 11:13) "th" else switch(as.character(r %% 10), "1" = "st", "2" = "nd", "3" = "rd", "th")
+  paste0(r, suffix, " highest")
 }

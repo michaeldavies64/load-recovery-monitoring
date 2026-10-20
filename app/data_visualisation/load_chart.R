@@ -97,7 +97,7 @@ load_chart <- function(days, view, tip, onclick = NULL, height = 300) {
   hits <- lapply(seq_len(n), function(i) {
     r <- days[i, ]
     clickable <- r$has_session && !is.null(onclick)
-    edge <- if (i <= n * 0.25) "md-edge-l" else if (i > n * 0.75) "md-edge-r" else NULL
+    edge <- if (i > n * 0.6) "md-edge-r" else NULL   # tooltips open to the left near the right edge
     htmltools::div(class = paste("md-lt-hit", edge, if (clickable) "md-clickable"),
                    `data-tip` = tip(r), onclick = if (clickable) onclick(r$date))
   })
