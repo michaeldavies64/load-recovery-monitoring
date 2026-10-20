@@ -2155,6 +2155,7 @@ vertical-align: -.125em;
   <li><a href="#decisions" id="toc-decisions" class="nav-link" data-scroll-target="#decisions">Decisions</a>
   <ul class="collapse">
   <li><a href="#what-gets-a-range" id="toc-what-gets-a-range" class="nav-link" data-scroll-target="#what-gets-a-range">What gets a range</a></li>
+  <li><a href="#recovery-scores-already-relative-to-the-norm" id="toc-recovery-scores-already-relative-to-the-norm" class="nav-link" data-scroll-target="#recovery-scores-already-relative-to-the-norm">Recovery scores: already relative to the norm</a></li>
   <li><a href="#starting-point" id="toc-starting-point" class="nav-link" data-scroll-target="#starting-point">Starting point</a></li>
   <li><a href="#known-changes-seasons-and-managers" id="toc-known-changes-seasons-and-managers" class="nav-link" data-scroll-target="#known-changes-seasons-and-managers">Known changes: seasons and managers</a></li>
   <li><a href="#range-width" id="toc-range-width" class="nav-link" data-scroll-target="#range-width">Range width</a></li>
@@ -2218,30 +2219,34 @@ vertical-align: -.125em;
 <td>Each metric on each match-day label, independently</td>
 </tr>
 <tr class="even">
-<td><a href="#starting-point">Starting point</a></td>
-<td>Load: the 2022/23 baseline season. Recovery: July to December 2023</td>
+<td><a href="#recovery-scores-already-relative-to-the-norm">Recovery scores</a></td>
+<td>Ranged like load, even though the provider already scores them against the player’s norm: the range adds the match week and a sense of scale</td>
 </tr>
 <tr class="odd">
+<td><a href="#starting-point">Starting point</a></td>
+<td>Load: the 2022/23 baseline season. Recovery: August to December 2023</td>
+</tr>
+<tr class="even">
 <td><a href="#known-changes-seasons-and-managers">Known changes</a></td>
 <td>At each new season or new head coach, past sessions are cut to count as 10 sessions</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#range-width">Range width</a></td>
 <td>90% predictive interval</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#scale">Scale</a></td>
 <td>log(value + offset), with the offset set to 25% of the metric’s typical baseline session, so ranges work in ratios rather than fixed amounts; peak speed and recovery as recorded</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#adaptive-range-or-z-score">Adaptive range or z-score</a></td>
 <td>Adaptive range for flags, with a standardised score shown alongside</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#minimum-history">Minimum history</a></td>
 <td>Load: always enough baseline sessions. Recovery: at least 5 baseline values</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#what-isnt-ranged">What isn’t ranged</a></td>
 <td>Extended-gap days, match days outside 85 to 125 minutes, and the baseline period itself</td>
 </tr>
@@ -2374,9 +2379,140 @@ vertical-align: -.125em;
 <p><strong>Why.</strong> Each day of the match week has a different training objective, so an MD-1 session should not be pulled towards what is typical on MD-4. Borrowing strength between labels would blur exactly the differences the tool needs to see.</p>
 <p><strong>Consequence.</strong> Labels with few sessions, such as MD-5, start with wide ranges and narrow over time instead of borrowing precision from other days.</p>
 </section>
+<section id="recovery-scores-already-relative-to-the-norm" class="level3">
+<h3 class="anchored" data-anchor-id="recovery-scores-already-relative-to-the-norm">Recovery scores: already relative to the norm</h3>
+<p><strong>The question.</strong> The recovery scores arrive already expressed relative to the player’s own norm: 0% is normal for that player and -20% is 20% below it. If the provider has already said how far from normal each score is, what does a range add?</p>
+<p><strong>Decision.</strong> Recovery scores get ranges in the same way as load: by match-day label, learned from the player’s own history. The two steps answer different questions:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Step</th>
+<th>Question it answers</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Provider’s score</td>
+<td>How does today compare with the player’s overall norm?</td>
+</tr>
+<tr class="even">
+<td>Adaptive range</td>
+<td>Is that difference unusual for this player on this kind of day?</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why.</strong> The provider’s score turns raw measurements, such as questionnaire answers, blood results and joint range tests, into one value on a common ruler. It stops there. It does not say how far from 0 is unusual, and it uses the same 0 on every day of the match week. The range treats the provider’s percentage as a number like any other, just as it treats total distance, and learns where this player’s scores usually sit on each label and how much they vary. That adds two things:</p>
+<ol type="1">
+<li><strong>The match week.</strong> Scores dip after a match and recover through the week, so the same score means different things on different days. Judged against 0 alone, almost every MD+1 would look like a problem.</li>
+<li><strong>A sense of scale.</strong> How far from 0 is unusual differs by marker. Soreness varies about 2.3 times as much as the overall score, so a fixed cut-off on the percentage would flag one far more often than the other.</li>
+</ol>
+<div class="cell">
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small" data-quarto-postprocess="true">
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">Score</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">MD+1</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">MD+2</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">MD-5</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">MD-4</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">MD-3</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">MD-2</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">MD-1</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">MD</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Overall recovery score</td>
+<td style="text-align: right;">-8%</td>
+<td style="text-align: right;">-5%</td>
+<td style="text-align: right;">+5%</td>
+<td style="text-align: right;">+2%</td>
+<td style="text-align: right;">-1%</td>
+<td style="text-align: right;">+0%</td>
+<td style="text-align: right;">+0%</td>
+<td style="text-align: right;">-1%</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Subjective recovery</td>
+<td style="text-align: right;">-10%</td>
+<td style="text-align: right;">-7%</td>
+<td style="text-align: right;">+12%</td>
+<td style="text-align: right;">+6%</td>
+<td style="text-align: right;">+1%</td>
+<td style="text-align: right;">+3%</td>
+<td style="text-align: right;">+3%</td>
+<td style="text-align: right;">-2%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Muscle soreness</td>
+<td style="text-align: right;">-19%</td>
+<td style="text-align: right;">-13%</td>
+<td style="text-align: right;">-6%</td>
+<td style="text-align: right;">+1%</td>
+<td style="text-align: right;">-4%</td>
+<td style="text-align: right;">-4%</td>
+<td style="text-align: right;">-5%</td>
+<td style="text-align: right;">+8%</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Sleep quality</td>
+<td style="text-align: right;">-22%</td>
+<td style="text-align: right;">-12%</td>
+<td style="text-align: right;">-1%</td>
+<td style="text-align: right;">-6%</td>
+<td style="text-align: right;">-12%</td>
+<td style="text-align: right;">-9%</td>
+<td style="text-align: right;">-2%</td>
+<td style="text-align: right;">+1%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p>The table shows the average score on each label for the four markers collected most days. The worked example below uses the latest range on each label for subjective recovery, with the same score of -20% on two different days:</p>
+<div class="cell">
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small" data-quarto-postprocess="true">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th">Label</th>
+<th data-quarto-table-cell-role="th">Provider says</th>
+<th data-quarto-table-cell-role="th">Usual on this label</th>
+<th data-quarto-table-cell-role="th">Normal range</th>
+<th data-quarto-table-cell-role="th">Range says</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MD+1</td>
+<td>20% below the player&#39;s norm</td>
+<td>-10%</td>
+<td>-32% to +12%</td>
+<td>In range: normal for this day</td>
+</tr>
+<tr class="even">
+<td>MD-4</td>
+<td>20% below the player&#39;s norm</td>
+<td>+6%</td>
+<td>-17% to +28%</td>
+<td>Below range: unexpected on this day</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p><strong>When a range would add little.</strong> If the provider’s norm already allowed for the match week and for each marker’s spread, fixed cut-offs on the percentage would do the same job more simply.</p>
+<p><strong>Consequence.</strong> Because the range keeps learning, a slow, lasting change becomes the player’s new usual and stops being flagged, whereas a fixed 0 would keep showing it. Blood markers averaged -5% in 2023/2024 and -18% in 2024/2025. The data guide does not say how the provider sets its norm, so both may be adapting at once. This matters most for the markers collected about once a week (blood markers, joint range and load tolerance), whose purpose is to catch slow change and which have few values on each label. It is listed under <a href="#limitations">Limitations</a>.</p>
+</section>
 <section id="starting-point" class="level3">
 <h3 class="anchored" data-anchor-id="starting-point">Starting point</h3>
-<p><strong>Decision.</strong> Load ranges start from the full 2022/23 season. Recovery data begins in July 2023, so recovery ranges start from July to December 2023. The baseline periods set the starting point and are not flagged themselves. The reasoning for both periods is in the feature engineering report.</p>
+<p><strong>Decision.</strong> Load ranges start from the full 2022/23 season. Recovery data begins in July 2023, but the July pre-season scores are removed (see the data quality report), so recovery ranges start from August to December 2023. The baseline periods set the starting point and are not flagged themselves. The reasoning for both periods is in the feature engineering report.</p>
 </section>
 <section id="known-changes-seasons-and-managers" class="level3">
 <h3 class="anchored" data-anchor-id="known-changes-seasons-and-managers">Known changes: seasons and managers</h3>
@@ -2641,21 +2777,21 @@ vertical-align: -.125em;
 <td style="text-align: right;">4.1% / 4.1%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Accelerations and decelerations (&gt;2.5 m/s²)</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;2.5 m/s&lt;U+00B2&gt;)</td>
 <td style="text-align: left;">log(value + 22)</td>
 <td style="text-align: right;">341</td>
 <td style="text-align: right;">10.3%</td>
 <td style="text-align: right;">3.8% / 6.5%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Accelerations and decelerations (&gt;3.5 m/s²)</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;3.5 m/s&lt;U+00B2&gt;)</td>
 <td style="text-align: left;">log(value + 6.7)</td>
 <td style="text-align: right;">341</td>
 <td style="text-align: right;">10.3%</td>
 <td style="text-align: right;">5.6% / 4.7%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Accelerations and decelerations (&gt;4.5 m/s²)</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;4.5 m/s&lt;U+00B2&gt;)</td>
 <td style="text-align: left;">log(value + 1.8)</td>
 <td style="text-align: right;">341</td>
 <td style="text-align: right;">8.8%</td>
@@ -2676,35 +2812,35 @@ vertical-align: -.125em;
 <td style="text-align: right;">1.8% / 3.8%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Time in HR zone 1 (50–60% max HR)</td>
+<td style="text-align: left;">Time in HR zone 1 (50&lt;U+2013&gt;60% max HR)</td>
 <td style="text-align: left;">log(value + 1.3)</td>
 <td style="text-align: right;">341</td>
 <td style="text-align: right;">9.7%</td>
 <td style="text-align: right;">5.0% / 4.7%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Time in HR zone 2 (60–70% max HR)</td>
+<td style="text-align: left;">Time in HR zone 2 (60&lt;U+2013&gt;70% max HR)</td>
 <td style="text-align: left;">log(value + 4)</td>
 <td style="text-align: right;">341</td>
 <td style="text-align: right;">10.0%</td>
 <td style="text-align: right;">1.8% / 8.2%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Time in HR zone 3 (70–80% max HR)</td>
+<td style="text-align: left;">Time in HR zone 3 (70&lt;U+2013&gt;80% max HR)</td>
 <td style="text-align: left;">log(value + 4)</td>
 <td style="text-align: right;">341</td>
 <td style="text-align: right;">10.0%</td>
 <td style="text-align: right;">2.9% / 7.0%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Time in HR zone 4 (80–90% max HR)</td>
+<td style="text-align: left;">Time in HR zone 4 (80&lt;U+2013&gt;90% max HR)</td>
 <td style="text-align: left;">log(value + 1.7)</td>
 <td style="text-align: right;">341</td>
 <td style="text-align: right;">8.5%</td>
 <td style="text-align: right;">4.1% / 4.4%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Time in HR zone 5 (90–100% max HR)</td>
+<td style="text-align: left;">Time in HR zone 5 (90&lt;U+2013&gt;100% max HR)</td>
 <td style="text-align: left;">log(value + 0.012)</td>
 <td style="text-align: right;">341</td>
 <td style="text-align: right;">8.8%</td>
@@ -2739,21 +2875,21 @@ vertical-align: -.125em;
 <td style="text-align: right;">3.1% / 4.1%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Accelerations and decelerations (&gt;2.5 m/s²) per minute</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;2.5 m/s&lt;U+00B2&gt;) per minute</td>
 <td style="text-align: left;">log(value + 0.32)</td>
 <td style="text-align: right;">291</td>
 <td style="text-align: right;">8.6%</td>
 <td style="text-align: right;">3.4% / 5.2%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Accelerations and decelerations (&gt;3.5 m/s²) per minute</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;3.5 m/s&lt;U+00B2&gt;) per minute</td>
 <td style="text-align: left;">log(value + 0.093)</td>
 <td style="text-align: right;">291</td>
 <td style="text-align: right;">8.9%</td>
 <td style="text-align: right;">4.5% / 4.5%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Accelerations and decelerations (&gt;4.5 m/s²) per minute</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;4.5 m/s&lt;U+00B2&gt;) per minute</td>
 <td style="text-align: left;">log(value + 0.024)</td>
 <td style="text-align: right;">291</td>
 <td style="text-align: right;">8.2%</td>
@@ -2801,19 +2937,19 @@ vertical-align: -.125em;
 <td style="text-align: right;">8.8%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Accelerations and decelerations (&gt;2.5 m/s²)</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;2.5 m/s&lt;U+00B2&gt;)</td>
 <td style="text-align: right;">9.7%</td>
 <td style="text-align: right;">10.3%</td>
 <td style="text-align: right;">12.0%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Accelerations and decelerations (&gt;3.5 m/s²)</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;3.5 m/s&lt;U+00B2&gt;)</td>
 <td style="text-align: right;">9.7%</td>
 <td style="text-align: right;">10.3%</td>
 <td style="text-align: right;">10.9%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Accelerations and decelerations (&gt;4.5 m/s²)</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;4.5 m/s&lt;U+00B2&gt;)</td>
 <td style="text-align: right;">7.9%</td>
 <td style="text-align: right;">8.8%</td>
 <td style="text-align: right;">9.4%</td>
@@ -2825,31 +2961,31 @@ vertical-align: -.125em;
 <td style="text-align: right;">12.3%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Time in HR zone 1 (50–60% max HR)</td>
+<td style="text-align: left;">Time in HR zone 1 (50&lt;U+2013&gt;60% max HR)</td>
 <td style="text-align: right;">10.0%</td>
 <td style="text-align: right;">9.7%</td>
 <td style="text-align: right;">9.4%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Time in HR zone 2 (60–70% max HR)</td>
+<td style="text-align: left;">Time in HR zone 2 (60&lt;U+2013&gt;70% max HR)</td>
 <td style="text-align: right;">10.3%</td>
 <td style="text-align: right;">10.0%</td>
 <td style="text-align: right;">10.3%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Time in HR zone 3 (70–80% max HR)</td>
+<td style="text-align: left;">Time in HR zone 3 (70&lt;U+2013&gt;80% max HR)</td>
 <td style="text-align: right;">9.1%</td>
 <td style="text-align: right;">10.0%</td>
 <td style="text-align: right;">10.0%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Time in HR zone 4 (80–90% max HR)</td>
+<td style="text-align: left;">Time in HR zone 4 (80&lt;U+2013&gt;90% max HR)</td>
 <td style="text-align: right;">7.6%</td>
 <td style="text-align: right;">8.5%</td>
 <td style="text-align: right;">9.1%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Time in HR zone 5 (90–100% max HR)</td>
+<td style="text-align: left;">Time in HR zone 5 (90&lt;U+2013&gt;100% max HR)</td>
 <td style="text-align: right;">9.4%</td>
 <td style="text-align: right;">8.8%</td>
 <td style="text-align: right;">10.6%</td>
@@ -2879,19 +3015,19 @@ vertical-align: -.125em;
 <td style="text-align: right;">7.2%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Accelerations and decelerations (&gt;2.5 m/s²) per minute</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;2.5 m/s&lt;U+00B2&gt;) per minute</td>
 <td style="text-align: right;">8.2%</td>
 <td style="text-align: right;">8.6%</td>
 <td style="text-align: right;">9.6%</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Accelerations and decelerations (&gt;3.5 m/s²) per minute</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;3.5 m/s&lt;U+00B2&gt;) per minute</td>
 <td style="text-align: right;">8.2%</td>
 <td style="text-align: right;">8.9%</td>
 <td style="text-align: right;">9.6%</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Accelerations and decelerations (&gt;4.5 m/s²) per minute</td>
+<td style="text-align: left;">Accelerations and decelerations (&gt;4.5 m/s&lt;U+00B2&gt;) per minute</td>
 <td style="text-align: right;">6.5%</td>
 <td style="text-align: right;">8.2%</td>
 <td style="text-align: right;">8.6%</td>
@@ -2921,6 +3057,7 @@ vertical-align: -.125em;
 <ul>
 <li><strong>One player.</strong> The hierarchical part of the paper’s method, borrowing strength across people, needs more than one player. Every table carries a player ID, so it can be added if squad data becomes available.</li>
 <li><strong>Normality on the modelling scale.</strong> The method assumes values are roughly normal after the log transform. Strongly bimodal metrics, such as sprint distance on days with and without sprint work, will fit less well.</li>
+<li><strong>Recovery scores are judged twice.</strong> The provider has already compared each recovery score with the player’s norm, and the range then learns what is usual from those scores. A slow, lasting change can be absorbed into “usual” and stop being flagged (see <a href="#recovery-scores-already-relative-to-the-norm">Recovery scores</a>).</li>
 <li><strong>Simulated data.</strong> The flag rates above show the method behaving as designed, not that it detects anything real about this player.</li>
 </ul>
 </section>

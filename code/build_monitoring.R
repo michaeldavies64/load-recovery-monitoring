@@ -66,13 +66,15 @@ build_load_ranges <- function(con) {
 
 # Recovery ranges: the same method for the overall recovery score and the six category
 # composites, with three differences:
-#   - the baseline is July to December 2023, because recovery data starts in July 2023
+#   - the baseline is August to December 2023, because recovery data starts in July 2023
+#     and the July pre-season scores are removed (see below)
 #   - values are modelled as recorded (they are already relative to the player's norm)
 #   - a unit needs at least 5 baseline values. If it has fewer, its first values after the
 #     baseline period are added to the starting point until it has 5, and show
 #     "Building baseline" in the meantime.
-# Recovery is measured on some days without a GPS row (June and July), which have no
-# match-day label and so no range.
+# Recovery scores from the July pre-season weeks are removed. Those days have no GPS row,
+# so there is no load before them to explain a score, and the provider already gives the
+# benchmark: each score is relative to the player's norm (0%).
 build_recovery_ranges <- function(con) {
   scores <- db_read(con, "reference", "recovery_glossary") |>
     dplyr::filter(is_score) |>
@@ -85,8 +87,7 @@ build_recovery_ranges <- function(con) {
   db_read(con, "staging", "recovery") |>
     dplyr::semi_join(scores, by = "metric") |>
     dplyr::filter(!is.na(value)) |>
-    dplyr::left_join(days, by = c("player_id", "date")) |>
-    dplyr::mutate(has_range = dplyr::coalesce(has_range, FALSE)) |>
+    dplyr::inner_join(days, by = c("player_id", "date")) |>   # drops the pre-season scores
     dplyr::arrange(player_id, metric, match_day, date) |>
     dplyr::group_by(player_id, metric, match_day) |>
     dplyr::group_modify(function(d, key) {
@@ -103,7 +104,6 @@ build_recovery_ranges <- function(con) {
     dplyr::ungroup() |>
     dplyr::mutate(
       no_range_reason = dplyr::case_when(
-        is.na(match_day)                                       ~ "No range: off-season",
         !has_range                                             ~ "No range: extended gap",
         date <= range_settings$recovery_baseline_end           ~ "Baseline period",
         is_baseline | is.na(lower)                             ~ "Building baseline",

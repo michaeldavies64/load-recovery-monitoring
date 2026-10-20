@@ -17,9 +17,6 @@ for (dir in c("data_management", "data_visualisation", "ui", "server")) {
   for (f in list.files(here::here("app", dir), pattern = "\\.R$", full.names = TRUE)) source(f, encoding = "UTF-8")
 }
 
-ensure_database()
-app_data <- load_app_data()
-
 theme <- bslib::bs_theme(
   version = 5,
   bg = "#FFFFFF", fg = "#1F2A37",
@@ -34,24 +31,46 @@ ui <- bslib::page_navbar(
   fillable = FALSE,
   title = "Load and recovery monitor",
   theme = theme,
-  header = htmltools::tags$link(rel = "stylesheet", href = "styles.css"),
+  header = htmltools::tagList(
+    htmltools::tags$link(rel = "stylesheet", href = "styles.css"),
+    # Until the data is ready, only the home page can be opened (see styles.css)
+    htmltools::tags$script(htmltools::HTML(
+      "document.documentElement.classList.add('md-loading');
+       $(document).on('shiny:connected', function() {
+         Shiny.addCustomMessageHandler('md-ready', function(x) { document.documentElement.classList.remove('md-loading'); });
+       });"))
+  ),
+  bslib::nav_panel("Home", value = "home", icon = shiny::icon("house"), ui_home("home")),
   bslib::nav_panel("Overview", value = "overview", ui_overview("overview")),
-  bslib::nav_panel("Profile", value = "profile", ui_placeholder("Player profile: next")),
+  bslib::nav_panel("Profile", value = "profile",
+                   ui_profile("profile")),
   bslib::nav_panel("Load over time", value = "load", ui_placeholder("Longitudinal overview: to follow")),
   bslib::nav_panel("Session check", value = "session", shiny::uiOutput("session_placeholder")),
+  bslib::nav_panel("Glossary", value = "glossary", ui_glossary("glossary")),
   bslib::nav_spacer(),
-  bslib::nav_item(htmltools::span(
+  bslib::nav_item(shiny::uiOutput("asof", inline = TRUE))
+)
+
+server <- function(input, output, session) {
+  # The page is already in the browser. Get the data: about 10 seconds the first time on a
+  # fresh deployment (the database is built), instant after that.
+  app_data <- get_app_data()
+
+  output$asof <- shiny::renderUI(htmltools::span(
     class = "md-asof",
     shiny::icon("calendar"),
     paste("Viewing as of", fmt_date_short(app_data$app_date)),
     htmltools::span(class = "md-muted", "\u00b7 the last day of data \u00b7 simulated")
   ))
-)
-
-server <- function(input, output, session) {
   # The day being looked at on the session check page, shared between pages
   selected_date <- shiny::reactiveVal(app_data$app_date)
+  # The chosen player, set on the home page (one player in this data)
+  selected_player <- shiny::reactiveVal(app_data$profile$player_id[1])
+  server_home("home", app_data, nav_session = session, selected_player = selected_player)
   server_overview("overview", app_data, nav_session = session, selected_date = selected_date)
+  server_profile("profile", app_data)
+  server_glossary("glossary", app_data)
+  session$sendCustomMessage("md-ready", TRUE)
   output$session_placeholder <- shiny::renderUI(
     ui_placeholder(paste("Session check for", fmt_date_short(selected_date()), "(page to follow)"))
   )

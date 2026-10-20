@@ -23,12 +23,14 @@ server_overview <- function(id, data, nav_session, selected_date) {
                   note = paste(f$match_day, when), onclick = js_set_input(ns("go_profile_bar"), f$metric))
       })
       md_tile("heart-pulse", "Current status",
-              htmltools::tagList(htmltools::div(class = "md-counts", counts("GPS"), counts("Recovery")), bars),
+              htmltools::tagList(htmltools::div(class = "md-counts", counts("GPS"), counts("Recovery")),
+                                 if (nrow(d$flagged)) bar_legend(ranges = TRUE), bars),
               ns("go_profile"), "Open profile")
     })
 
     output$tile_session <- shiny::renderUI({
       key <- c("day_duration", "distance", "distance_over_21", "accel_decel_over_3_5")
+      shown <- d$latest[d$latest$metric %in% key, ]
       bars <- lapply(key, function(m) {
         r <- d$latest[d$latest$metric == m, ]
         range_bar(r$short_label, r$value, r$lower, r$upper, r$typical, r$status, r$decimals, r$unit,
@@ -42,7 +44,10 @@ server_overview <- function(id, data, nav_session, selected_date) {
       } else "Against the player's normal range for this kind of day"
       md_tile("calendar", "Latest session",
               htmltools::tagList(htmltools::p(class = "md-tile-value", what),
-                                 htmltools::p(class = "md-muted small", intro), bars),
+                                 htmltools::p(class = "md-muted small", intro),
+                                 bar_legend(ranges = any(!is.na(shown$lower)),
+                                            match = any(is.na(shown$lower) & !is.na(shown$pct_of_match))),
+                                 bars),
               ns("go_session"), "Check this session")
     })
 

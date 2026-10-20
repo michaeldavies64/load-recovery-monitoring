@@ -43,6 +43,14 @@ gps <- staging$gps
 rec <- staging$rec
 cap <- staging$cap
 rec_glossary <- staging$rec_glossary
+# Days with recovery scores but no GPS row: the July pre-season weeks.
+# Scores only: completeness values are also recorded on some days with no scores.
+preseason <- rec |>
+  filter(metric %in% rec_glossary$metric[rec_glossary$is_score], !is.na(value)) |>
+  distinct(date) |>
+  anti_join(gps, by = "date")
+n_preseason <- nrow(preseason)
+preseason_months <- paste(unique(format(preseason$date, "%B %Y")), collapse = " and ")
 cap_flagged <- flag_capability_tests(cap)
 
 overlap <- c(
@@ -124,6 +132,13 @@ ggplot(comp, aes(share, label, fill = low)) +
 
 `r format(nrow(rec), big.mark = ",")` rows in long format: 13 metrics a day from `r fmt_date(min(rec$date))` to `r fmt_date(max(rec$date))`. Each of six categories has a completeness score (0 to 1) and a composite score relative to the player's norm, plus one overall score. Missing means not collected; zero is a real zero. Infrequent tests such as blood markers will need carrying forward, with their age shown, if they are to sit on a daily view.
 
+**Pre-season recovery scores.** Recovery is also collected through pre-season, when there is no GPS data. `r n_preseason` days (`r preseason_months`) have recovery scores but no GPS row, so they have no day of the match week; scores are collected six days a week then, with none on Sundays. The pipeline removes them, for two reasons:
+
+- **No load context.** With no GPS before them, there is no record of the training a score is responding to, so it can't be read against the load that came before it.
+- **The benchmark is already given.** Each score is already relative to the player's norm (0%), so these weeks are not needed to establish what normal looks like.
+
+They are kept in the staging schema, as received, and dropped when the monitoring tables are built.
+
 #### When each marker is collected
 
 Recovery scores are not collected every day, and which days they fall on matters: a marker that is rarely taken the day after a match can't show the response to that match. Each tab shows the share of days a score exists, by day of the match week.
@@ -131,17 +146,17 @@ Recovery scores are not collected every day, and which days they fall on matters
 ```{r}
 #| label: rec-by-match-day
 #| include: false
-# Match-week day for each date, from the GPS codes. Days from June and July have no GPS
-# row (the GPS file stops each summer), so they are grouped as "Off-season".
+# Match-week day for each date, from the GPS codes. Recovery is collected through the July
+# pre-season weeks, but the GPS file has no rows then, so those days are grouped as "Pre-season".
 md_day <- function(p, m) case_when(
-  is.na(p)    ~ "Off-season",
+  is.na(p)    ~ "Pre-season",
   p == 0      ~ "MD",
   m == -1     ~ "MD-1",
   p %in% 1:2  ~ paste0("MD+", p),
   m >= -4     ~ paste0("MD", m),
   TRUE        ~ "Longer gap"
 )
-md_levels <- c("MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1", "MD", "Longer gap", "Off-season")
+md_levels <- c("MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1", "MD", "Longer gap", "Pre-season")
 week_days <- md_levels[1:7]
 
 rec_week <- rec |>
@@ -170,7 +185,7 @@ plot_rec_week <- function(d) {
                       scales::percent(hi$share, accuracy = 1), hi$day, scales::percent(lo$share, accuracy = 1), lo$day),
       subtitle = "Share of days with a score, by day of the match week",
       x = NULL, y = NULL,
-      caption = "Grey: days outside a normal match week.\nLonger gap = five or more days to the next match. Off-season = June and July, when there is no GPS data."
+      caption = "Grey: days outside a normal match week.\nLonger gap = five or more days to the next match. Pre-season = July, when recovery is collected but there is no GPS data."
     ) +
     theme_md(base_size = 11) +
     theme(panel.grid.major.x = element_blank())
@@ -211,7 +226,8 @@ All three files describe one player, so **date is the only join key**. The GPS a
 5. Keep benchmark scores uncapped; they are relative scores, not percentiles.
 6. Treat missing recovery values as not collected; keep zeros as measured values.
 7. Use the overall recovery score as supplied rather than recomputing it.
-8. Restrict combined analyses to the overlap window, `r fmt_date(overlap[1])` to `r fmt_date(overlap[2])`.
+8. Remove recovery scores from days with no GPS row (the July pre-season weeks).
+9. Restrict combined analyses to the overlap window, `r fmt_date(overlap[1])` to `r fmt_date(overlap[2])`.
 
 ::: {.md-source}
 Data: CFC Insights Vizathon 2025, Chelsea FC Performance Insights (simulated data for one player). Raw files are downloaded from the public competition repository, not stored here, and loaded into the staging schema of the project's DuckDB database before this report runs.

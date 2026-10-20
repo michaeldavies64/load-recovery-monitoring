@@ -61,7 +61,7 @@ The data describes one player and is simulated, but the fixtures follow Chelsea'
 | [Match-day duration band](#match-day-duration-band) | Matches lasting 85 to 125 minutes are full matches: the match-day reference. Other match days are kept, with no load range |
 | [Per-minute values](#per-minute-values) | Distance, speed bands and efforts per minute, as measures of intensity |
 | [Load baseline](#load-baseline) | The full `r baseline_season` season |
-| [Recovery baseline](#recovery-baseline) | July to December 2023, with at least 5 values needed for a range |
+| [Recovery baseline](#recovery-baseline) | August to December 2023, with at least 5 values needed for a range |
 
 ## Days without a session
 
@@ -249,7 +249,7 @@ bind_rows(
 
 ## Recovery baseline
 
-**Decision.** Recovery data starts in July 2023, after the load baseline season, so recovery gets its own baseline: July to `r fmt_day(recovery_baseline_end)`. A metric needs at least 5 baseline values on a match-day label to get a range there; otherwise it shows "building baseline".
+**Decision.** Recovery data starts in July 2023, after the load baseline season, so recovery gets its own baseline: August to `r fmt_day(recovery_baseline_end)`. The July pre-season scores are removed, because there is no GPS data before them to give them context and each score is already relative to the player's norm; the data quality report explains this. A metric needs at least 5 baseline values on a match-day label to get a range there; otherwise it shows "building baseline".
 
 **Why.** There is no earlier season to learn from, and recovery is not collected every day, so some label and metric combinations are thin. For the overall recovery score:
 

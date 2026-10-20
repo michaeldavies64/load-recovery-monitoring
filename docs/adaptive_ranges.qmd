@@ -33,7 +33,9 @@ knitr::opts_chunk$set(dev = "ragg_png")
 db <- with_db(read_only = TRUE, function(con) list(
   daily = db_read(con, "features", "daily_load"),
   glossary = db_read(con, "reference", "gps_glossary"),
-  events = db_read(con, "reference", "events")
+  events = db_read(con, "reference", "events"),
+  recovery = db_read(con, "monitoring", "recovery_ranges"),
+  rec_glossary = db_read(con, "reference", "recovery_glossary")
 ))
 daily <- db$daily
 glossary <- db$glossary
@@ -107,7 +109,8 @@ The load monitoring tool has to answer one question quickly: is this session, or
 | Decision | Choice |
 |---|---|
 | [What gets a range](#what-gets-a-range) | Each metric on each match-day label, independently |
-| [Starting point](#starting-point) | Load: the 2022/23 baseline season. Recovery: July to December 2023 |
+| [Recovery scores](#recovery-scores-already-relative-to-the-norm) | Ranged like load, even though the provider already scores them against the player's norm: the range adds the match week and a sense of scale |
+| [Starting point](#starting-point) | Load: the 2022/23 baseline season. Recovery: August to December 2023 |
 | [Known changes](#known-changes-seasons-and-managers) | At each new season or new head coach, past sessions are cut to count as `r reset_weight` sessions |
 | [Range width](#range-width) | `r round(100 * interval)`% predictive interval |
 | [Scale](#scale) | log(value + offset), with the offset set to 25% of the metric's typical baseline session, so ranges work in ratios rather than fixed amounts; peak speed and recovery as recorded |
@@ -194,9 +197,82 @@ Overall, `r pct(sum(assessed$flag != "In range"), nrow(assessed))` of `r fmt_n(n
 
 **Consequence.** Labels with few sessions, such as MD-5, start with wide ranges and narrow over time instead of borrowing precision from other days.
 
+### Recovery scores: already relative to the norm
+
+```{r}
+#| label: recovery-setup
+#| include: false
+# Numbers quoted in this section, from the recovery ranges the pipeline built
+rec_daily <- c("emboss_baseline_score", "subjective_baseline_composite", "soreness_baseline_composite", "sleep_baseline_composite")
+rec_sd <- db$recovery |> filter(!is.na(value)) |> group_by(metric) |> summarise(sd = sd(value)) |> (\(d) setNames(d$sd, d$metric))()
+bio_season <- db$recovery |>
+  filter(metric == "bio_baseline_composite", !is.na(value)) |>
+  group_by(season) |>
+  summarise(avg = mean(value)) |>
+  (\(d) setNames(d$avg, d$season))()
+# Worked example: the same subjective recovery score on two labels
+ex_value <- -0.20
+ex_labels <- c("MD+1", "MD-4")
+```
+
+**The question.** The recovery scores arrive already expressed relative to the player's own norm: 0% is normal for that player and -20% is 20% below it. If the provider has already said how far from normal each score is, what does a range add?
+
+**Decision.** Recovery scores get ranges in the same way as load: by match-day label, learned from the player's own history. The two steps answer different questions:
+
+| Step | Question it answers |
+|---|---|
+| Provider's score | How does today compare with the player's overall norm? |
+| Adaptive range | Is that difference unusual for this player on this kind of day? |
+
+**Why.** The provider's score turns raw measurements, such as questionnaire answers, blood results and joint range tests, into one value on a common ruler. It stops there. It does not say how far from 0 is unusual, and it uses the same 0 on every day of the match week. The range treats the provider's percentage as a number like any other, just as it treats total distance, and learns where this player's scores usually sit on each label and how much they vary. That adds two things:
+
+1. **The match week.** Scores dip after a match and recover through the week, so the same score means different things on different days. Judged against 0 alone, almost every MD+1 would look like a problem.
+2. **A sense of scale.** How far from 0 is unusual differs by marker. Soreness varies about `r sprintf("%.1f", rec_sd["soreness_baseline_composite"] / rec_sd["emboss_baseline_score"])` times as much as the overall score, so a fixed cut-off on the percentage would flag one far more often than the other.
+
+```{r}
+#| label: rec-by-label
+db$recovery |>
+  filter(metric %in% rec_daily, !is.na(value), match_day %in% label_levels, match_day != "Extended gap") |>
+  mutate(match_day = factor(match_day, levels = label_levels)) |>
+  group_by(metric, match_day) |>
+  summarise(avg = mean(value), .groups = "drop") |>
+  left_join(select(db$rec_glossary, metric, Score = label, display_order), by = "metric") |>
+  arrange(display_order) |>
+  mutate(avg = sprintf("%+.0f%%", round(100 * avg) + 0)) |>   # + 0 turns -0 into 0
+  select(Score, match_day, avg) |>
+  pivot_wider(names_from = match_day, values_from = avg) |>
+  kable_md(align = c("l", rep("r", 8)))
+```
+
+The table shows the average score on each label for the four markers collected most days. The worked example below uses the latest range on each label for subjective recovery, with the same score of `r sprintf("%.0f%%", 100 * ex_value)` on two different days:
+
+```{r}
+#| label: rec-example
+ex <- db$recovery |>
+  filter(metric == "subjective_baseline_composite", match_day %in% ex_labels, !is.na(lower)) |>
+  group_by(match_day) |>
+  slice_max(date, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  mutate(match_day = factor(match_day, levels = ex_labels)) |>
+  arrange(match_day)
+ex |>
+  transmute(
+    Label = match_day,
+    `Provider says` = sprintf("%.0f%% below the player's norm", -100 * ex_value),
+    `Usual on this label` = sprintf("%+.0f%%", 100 * typical),
+    `Normal range` = sprintf("%+.0f%% to %+.0f%%", 100 * lower, 100 * upper),
+    `Range says` = ifelse(ex_value < lower, "Below range: unexpected on this day", "In range: normal for this day")
+  ) |>
+  kable_md()
+```
+
+**When a range would add little.** If the provider's norm already allowed for the match week and for each marker's spread, fixed cut-offs on the percentage would do the same job more simply.
+
+**Consequence.** Because the range keeps learning, a slow, lasting change becomes the player's new usual and stops being flagged, whereas a fixed 0 would keep showing it. Blood markers averaged `r sprintf("%+.0f%%", 100 * bio_season[1])` in `r names(bio_season)[1]` and `r sprintf("%+.0f%%", 100 * bio_season[2])` in `r names(bio_season)[2]`. The data guide does not say how the provider sets its norm, so both may be adapting at once. This matters most for the markers collected about once a week (blood markers, joint range and load tolerance), whose purpose is to catch slow change and which have few values on each label. It is listed under [Limitations](#limitations).
+
 ### Starting point
 
-**Decision.** Load ranges start from the full 2022/23 season. Recovery data begins in July 2023, so recovery ranges start from July to December 2023. The baseline periods set the starting point and are not flagged themselves. The reasoning for both periods is in the feature engineering report.
+**Decision.** Load ranges start from the full 2022/23 season. Recovery data begins in July 2023, but the July pre-season scores are removed (see the data quality report), so recovery ranges start from August to December 2023. The baseline periods set the starting point and are not flagged themselves. The reasoning for both periods is in the feature engineering report.
 
 ### Known changes: seasons and managers
 
@@ -399,6 +475,7 @@ robustness |>
 
 - **One player.** The hierarchical part of the paper's method, borrowing strength across people, needs more than one player. Every table carries a player ID, so it can be added if squad data becomes available.
 - **Normality on the modelling scale.** The method assumes values are roughly normal after the log transform. Strongly bimodal metrics, such as sprint distance on days with and without sprint work, will fit less well.
+- **Recovery scores are judged twice.** The provider has already compared each recovery score with the player's norm, and the range then learns what is usual from those scores. A slow, lasting change can be absorbed into "usual" and stop being flagged (see [Recovery scores](#recovery-scores-already-relative-to-the-norm)).
 - **Simulated data.** The flag rates above show the method behaving as designed, not that it detects anything real about this player.
 
 ## Reference

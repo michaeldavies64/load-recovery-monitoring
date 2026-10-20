@@ -20,13 +20,28 @@ ensure_database <- function(path = db_path) {
   invisible(path)
 }
 
-# Everything the app shows, read once at start-up. The data is small (a few thousand
+# The app's data, built or read the first time a visitor arrives and then kept for every
+# later visitor. Called from the server, not at start-up, so the home page can be sent
+# to the browser (and read) while a fresh deployment is still building the database.
+get_app_data <- local({
+  cache <- NULL
+  function() {
+    if (is.null(cache)) {
+      ensure_database()
+      cache <<- load_app_data()
+    }
+    cache
+  }
+})
+
+# Everything the app shows, read once. The data is small (a few thousand
 # rows), so holding it in memory keeps the app fast and the database connection short.
 load_app_data <- function(path = db_path) {
   with_db(path = path, read_only = TRUE, function(con) {
     tables <- list(
       profile         = db_read(con, "reference", "player_profile"),
       gps_glossary    = db_read(con, "reference", "gps_glossary"),
+      rec_glossary    = db_read(con, "reference", "recovery_glossary"),
       status          = db_read(con, "monitoring", "player_status"),
       load_ranges     = db_read(con, "monitoring", "load_ranges"),
       recovery_ranges = db_read(con, "monitoring", "recovery_ranges"),
