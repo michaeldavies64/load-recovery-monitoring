@@ -7,6 +7,8 @@
 # Raw Vizathon files: downloaded by scr/01_download_data.R, never committed
 input/*
 !input/.gitkeep
+# Reference tables written by hand, such as the GPS glossary, are committed
+!input/reference/
 
 # Built by the pipeline, rebuilt from one command
 data/*
@@ -22,3 +24,6 @@ rsconnect/
 docs/*_files/
 .quarto/
 
+
+/.quarto/
+**/*.quarto_ipynb

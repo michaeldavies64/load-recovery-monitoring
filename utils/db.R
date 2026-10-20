@@ -1,10 +1,15 @@
 # Connection helpers for the project's DuckDB database.
 # The database is a single file in data/, rebuilt from the raw files by the pipeline
 # and never committed. Tables are grouped into schemas:
-#   staging   one table per source file, as read by utils/read_data.R
-#   analysis  tables built from staging with the SQL in queries/ (later chapters)
+#   staging     one table per source file, as read by utils/read_data.R
+#   reference   hand-written lookups from input/reference/, such as the glossaries
+#   features    derived inputs built from staging with the SQL in queries/:
+#               labels, flags, reshaping and rolling loads
+#   monitoring  model outputs the app reads, such as the adaptive ranges (later)
 
-db_path <- file.path("data", "load_recovery.duckdb")
+# here::here() builds the path from the project root (where the .Rproj file is), so the
+# database is found whether code runs from the root, from docs/ or from a Quarto chunk
+db_path <- here::here("data", "load_recovery.duckdb")
 
 db_connect <- function(path = db_path, read_only = FALSE) {
   dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
@@ -40,4 +45,19 @@ db_table_counts <- function(con, schema) {
                                 DBI::dbQuoteIdentifier(con, DBI::Id(schema = schema, table = t))))$n
   }, numeric(1))
   data.frame(table = paste0(schema, ".", tables), rows = rows, row.names = NULL)
+}
+
+# Reads one table from a schema as a tibble
+db_read <- function(con, schema, table) {
+  tibble::as_tibble(DBI::dbReadTable(con, DBI::Id(schema = schema, table = table)))
+}
+
+# Builds schema.table from a SELECT query stored in queries/, replacing any previous version.
+# Keeping each file a plain SELECT means it can also be run on its own to inspect the result.
+db_build_table <- function(con, schema, table, file, dir = here::here("queries")) {
+  sql <- paste(readLines(file.path(dir, file), encoding = "UTF-8", warn = FALSE), collapse = "\n")
+  DBI::dbExecute(con, paste("CREATE SCHEMA IF NOT EXISTS", DBI::dbQuoteIdentifier(con, schema)))
+  target <- DBI::dbQuoteIdentifier(con, DBI::Id(schema = schema, table = table))
+  DBI::dbExecute(con, paste0("CREATE OR REPLACE TABLE ", target, " AS\n", sql))
+  invisible(DBI::dbGetQuery(con, paste("SELECT COUNT(*) AS n FROM", target))$n)
 }

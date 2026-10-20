@@ -14,7 +14,7 @@ vizathon_base_url <- "https://raw.githubusercontent.com/Chelsea-Fc-Performance-I
 # "downloaded", "already present" or "failed" (with the error message).
 # Each file is downloaded to a temporary file first and only moved into place once
 # it has arrived in full, so a failed download never leaves a partial file behind.
-download_vizathon_data <- function(dest = "input", overwrite = FALSE) {
+download_vizathon_data <- function(dest = here::here("input"), overwrite = FALSE) {
   dir.create(dest, showWarnings = FALSE, recursive = TRUE)
 
   results <- lapply(names(vizathon_files), function(key) {

@@ -1,0 +1,218 @@
+---
+title: "Data quality"
+subtitle: "What the GPS, physical capability and recovery files contain, how they join, and what the pipeline must handle"
+author: "Michael Davies"
+date: today
+date-format: "D MMMM YYYY"
+format:
+  html:
+    theme: [default, md-report.scss]
+    embed-resources: true
+    toc: true
+    toc-title: "Contents"
+    toc-location: right
+    fig-width: 8
+    fig-height: 3.6
+    fig-dpi: 160
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+})
+for (f in list.files(here::here("utils"), pattern = "\\.R$", full.names = TRUE)) source(f, encoding = "UTF-8")
+knitr::opts_chunk$set(dev = "ragg_png")
+
+# Every table comes from the staging schema of the project database,
+# so this report checks exactly what the rest of the pipeline uses.
+# Run scr/02_load_staging.R first if the database doesn't exist yet.
+staging <- with_db(read_only = TRUE, function(con) list(
+  gps = db_read(con, "staging", "gps"),
+  rec = db_read(con, "staging", "recovery"),
+  cap = db_read(con, "staging", "capability"),
+  rec_glossary = db_read(con, "reference", "recovery_glossary")
+))
+gps <- staging$gps
+rec <- staging$rec
+cap <- staging$cap
+rec_glossary <- staging$rec_glossary
+cap_flagged <- flag_capability_tests(cap)
+
+overlap <- c(
+  max(min(gps$date), min(cap$test_date), min(rec$date)),
+  min(max(gps$date), max(cap$test_date), max(rec$date))
+)
+checks <- bind_rows(
+  check_gps_quality(gps),
+  check_capability_quality(cap_flagged),
+  check_recovery_quality(rec),
+  check_coverage_quality(gps, cap, rec)
+)
+fmt_date <- function(d) fmt_day(d)
+pct <- function(x, y) paste0(round(100 * x / y), "%")
+```
+
+The Chelsea FC Performance Insights Vizathon 2025 dataset contains **simulated data for one player**. This report covers the three daily files: GPS, physical capability and recovery. It records what each file holds, checks it against the data guide and against itself, and sets out the cleaning rules the pipeline will follow. Every number below is calculated from the data when this report renders.
+
+## Summary
+
+The data is clean in the ways that matter most for joining: every file has exactly one row per date (and per test or metric), dates parse without error, and missing values are recorded consistently. One thing needs handling before analysis, and two more need care:
+
+1. **Most capability rows are repeats.** The file carries each result forward daily until the next test, so `r pct(sum(!is.na(cap$benchmark_pct) & !cap_flagged$is_new_result), nrow(cap))` of rows are copies. Trends and test counts must use only the `r format(sum(cap_flagged$is_new_result), big.mark = ",")` genuine results.
+2. **Days off are rows of zeros.** GPS has a row for every calendar day, so `r sum(gps$distance == 0)` days without a session must be excluded from averages and norms.
+3. **Recovery is collected on most days, not all.** The overall recovery score exists on `r pct(sum(!is.na(rec$value[rec$metric == "emboss_baseline_score"])), sum(rec$metric == "emboss_baseline_score"))` of days, and missing means not collected.
+
+## All checks
+
+```{r}
+#| label: checks-table
+status_html <- function(s) sprintf('<span class="status %s">%s</span>', tolower(s), s)
+checks |>
+  mutate(
+    Affected = ifelse(status == "Pass" & n == 0, "None", paste0(format(n, big.mark = ","), " of ", format(total, big.mark = ","))),
+    Status = status_html(status)
+  ) |>
+  select(File = area, Check = check, Affected, Status, `What it means` = note) |>
+  knitr::kable(format = "html", escape = FALSE, align = "lllll")
+```
+
+## The files
+
+### GPS
+
+`r nrow(gps)` rows, one per calendar day from `r fmt_date(min(gps$date))` to `r fmt_date(max(gps$date))`, including `r sum(gps$md_plus_code == 0)` match days. Days without a session are stored as rows of zeros (`r sum(gps$distance == 0)` days), so averages must exclude them. Match-day codes count up to 10 in both directions and stop there, so "10" means "10 or more". Heart rate zones arrive as minutes and seconds; the reader converts them to minutes.
+
+### Physical capability
+
+`r format(nrow(cap), big.mark = ",")` rows: 20 combinations of movement (agility, jump, sprint, upper body), quality and expression (isometric or dynamic), every day from `r fmt_date(min(cap$test_date))` to `r fmt_date(max(cap$test_date))`. The score is a benchmark percentage that can exceed 100% or fall below 0. Across all combinations there are `r format(sum(cap_flagged$is_new_result), big.mark = ",")` genuine results on `r n_distinct(cap_flagged$test_date[cap_flagged$is_new_result])` test days.
+
+### Recovery status
+
+```{r}
+#| label: rec-completeness
+#| fig-height: 3
+#| fig-alt: "Bar chart of the share of days each recovery category has a score. Subjective recovery is highest, blood markers lowest."
+comp <- rec |>
+  filter(category != "total", grepl("composite$", metric)) |>
+  group_by(category) |>
+  summarise(share = mean(!is.na(value)), .groups = "drop") |>
+  mutate(
+    label = rec_glossary$category_label[match(category, rec_glossary$category)],
+    label = reorder(label, share), low = share == min(share)
+  )
+ggplot(comp, aes(share, label, fill = low)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = scales::percent(share, accuracy = 1)), hjust = -0.15, size = 3.3, colour = md_colours$ink_secondary, family = "Inter") +
+  scale_fill_manual(values = c(`FALSE` = md_colours$context, `TRUE` = md_colours$signal), guide = "none") +
+  scale_x_continuous(labels = scales::percent, limits = c(0, 0.7), expand = expansion(mult = c(0, 0.02))) +
+  labs(
+    title = paste0("Blood markers are measured on only ", scales::percent(min(comp$share), accuracy = 1), " of days"),
+    subtitle = "Share of days with a composite score, by recovery category",
+    x = NULL, y = NULL
+  ) +
+  theme_md(base_size = 11) +
+  theme(panel.grid.major.y = element_blank(), panel.grid.major.x = element_line(colour = md_colours$gridline, linewidth = 0.4),
+        axis.text.y = element_text(colour = md_colours$ink_secondary, size = 10))
+```
+
+`r format(nrow(rec), big.mark = ",")` rows in long format: 13 metrics a day from `r fmt_date(min(rec$date))` to `r fmt_date(max(rec$date))`. Each of six categories has a completeness score (0 to 1) and a composite score relative to the player's norm, plus one overall score. Missing means not collected; zero is a real zero. Infrequent tests such as blood markers will need carrying forward, with their age shown, if they are to sit on a daily view.
+
+#### When each marker is collected
+
+Recovery scores are not collected every day, and which days they fall on matters: a marker that is rarely taken the day after a match can't show the response to that match. Each tab shows the share of days a score exists, by day of the match week.
+
+```{r}
+#| label: rec-by-match-day
+#| include: false
+# Match-week day for each date, from the GPS codes. Days from June and July have no GPS
+# row (the GPS file stops each summer), so they are grouped as "Off-season".
+md_day <- function(p, m) case_when(
+  is.na(p)    ~ "Off-season",
+  p == 0      ~ "MD",
+  m == -1     ~ "MD-1",
+  p %in% 1:2  ~ paste0("MD+", p),
+  m >= -4     ~ paste0("MD", m),
+  TRUE        ~ "Longer gap"
+)
+md_levels <- c("MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1", "MD", "Longer gap", "Off-season")
+week_days <- md_levels[1:7]
+
+rec_week <- rec |>
+  filter(metric %in% rec_glossary$metric[rec_glossary$is_score]) |>
+  left_join(select(gps, date, md_plus_code, md_minus_code), by = "date") |>
+  mutate(day = factor(md_day(md_plus_code, md_minus_code), levels = md_levels)) |>
+  group_by(metric, day) |>
+  summarise(n_days = n(), share = mean(!is.na(value)), .groups = "drop") |>
+  left_join(select(rec_glossary, metric, label, display_order), by = "metric") |>
+  mutate(in_week = day %in% week_days)
+
+plot_rec_week <- function(d) {
+  wk <- filter(d, in_week)
+  hi <- slice_max(wk, share, n = 1, with_ties = FALSE)
+  lo <- slice_min(wk, share, n = 1, with_ties = FALSE)
+  ggplot(d, aes(day, share, fill = in_week)) +
+    geom_col(width = 0.65) +
+    geom_text(aes(label = scales::percent(share, accuracy = 1)), vjust = -0.5, size = 3.1,
+              colour = md_colours$ink_secondary, family = "Inter") +
+    scale_fill_manual(values = c(`TRUE` = md_colours$signal, `FALSE` = md_colours$context), guide = "none") +
+    scale_y_continuous(labels = scales::percent, limits = c(0, 1.08), breaks = seq(0, 1, 0.25),
+                       expand = expansion(mult = c(0, 0))) +
+    scale_x_discrete(labels = function(x) sub(" ", "\n", x)) +
+    labs(
+      title = sprintf("Collected on %s of %s days, but only %s of %s days",
+                      scales::percent(hi$share, accuracy = 1), hi$day, scales::percent(lo$share, accuracy = 1), lo$day),
+      subtitle = "Share of days with a score, by day of the match week",
+      x = NULL, y = NULL,
+      caption = "Grey: days outside a normal match week.\nLonger gap = five or more days to the next match. Off-season = June and July, when there is no GPS data."
+    ) +
+    theme_md(base_size = 11) +
+    theme(panel.grid.major.x = element_blank())
+}
+```
+
+```{r}
+#| label: rec-by-match-day-tabs
+#| results: asis
+#| fig-height: 3.4
+cat("::: {.panel-tabset}\n\n")
+for (m in rec_glossary$metric[rec_glossary$is_score]) {
+  d <- filter(rec_week, metric == m)
+  cat("##### ", d$label[1], "\n\n", sep = "")
+  print(plot_rec_week(d))
+  cat("\n\n")
+}
+cat(":::\n")
+```
+
+The overall score and subjective recovery are collected on nearly every MD-2 and MD-1, but on far fewer MD+1s and few match days. Joint range and load tolerance are concentrated on MD+2, and blood markers on MD+1 and MD+2. Any analysis of recovery after a match has to account for this: apart from match day itself, MD+1 is the day the overall score is most often missing.
+
+## How the files join
+
+All three files describe one player, so **date is the only join key**. The GPS and recovery files have one row per day and join directly; capability joins on date once reduced to new results.
+
+| From | To | Key | Notes |
+|---|---|---|---|
+| GPS | Recovery | `date` | `r sum(gps$date >= overlap[1] & gps$date <= overlap[2])` GPS days in the overlap, all with a recovery row |
+| GPS | Capability | `date` = `test_date` | Join to the most recent result on or before each date |
+
+## Rules for the pipeline
+
+1. Read the GPS file as Latin-1, and parse all dates as day/month/year.
+2. Keep GPS rows of zeros as days without a session; exclude them from averages and load totals.
+3. Treat match-day code 10 as "10 or more" and derive match context from `md_plus_code == 0`.
+4. Reduce capability data to new results before calculating trends, test frequency or change.
+5. Keep benchmark scores uncapped; they are relative scores, not percentiles.
+6. Treat missing recovery values as not collected; keep zeros as measured values.
+7. Use the overall recovery score as supplied rather than recomputing it.
+8. Restrict combined analyses to the overlap window, `r fmt_date(overlap[1])` to `r fmt_date(overlap[2])`.
+
+::: {.md-source}
+Data: CFC Insights Vizathon 2025, Chelsea FC Performance Insights (simulated data for one player). Raw files are downloaded from the public competition repository, not stored here, and loaded into the staging schema of the project's DuckDB database before this report runs.
+:::

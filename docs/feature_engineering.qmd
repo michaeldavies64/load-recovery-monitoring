@@ -1,0 +1,273 @@
+---
+title: "Feature engineering"
+subtitle: "How the raw GPS and recovery data become the inputs for load monitoring, and why each choice was made"
+author: "Michael Davies"
+date: today
+date-format: "D MMMM YYYY"
+format:
+  html:
+    theme: [default, md-report.scss]
+    embed-resources: true
+    toc: true
+    toc-title: "Contents"
+    toc-location: right
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+})
+for (f in list.files(here::here("utils"), pattern = "\\.R$", full.names = TRUE)) source(f, encoding = "UTF-8")
+
+# Every table comes from the project database, so the evidence below always matches the data.
+# Run scr/02_load_staging.R and scr/03_build_features.R first.
+db <- with_db(read_only = TRUE, function(con) list(
+  daily = db_read(con, "features", "daily_load"),
+  rec = db_read(con, "staging", "recovery")
+))
+daily <- db$daily
+rec <- db$rec
+
+label_levels <- daily |> distinct(match_day, match_day_order) |> arrange(match_day_order) |> pull(match_day)
+fmt_n <- function(x) format(x, big.mark = ",")
+pct <- function(x, y) paste0(round(100 * x / y), "%")
+kable_md <- function(df, align = NULL) knitr::kable(df, format = "html", align = align)
+
+sessions <- filter(daily, has_session)
+n_off <- sum(!daily$has_session)
+baseline_season <- unique(daily$season[daily$is_baseline_season])
+recovery_baseline_end <- as.Date("2023-12-31")
+```
+
+Feature engineering turns the staging tables into the inputs the load monitoring tool and the adaptive ranges need: labels, flags and cleaned metrics. Every rule is applied in SQL (`queries/daily_load.sql`) and builds the `features` schema of the project database. This report records each decision, the options considered, the reasoning, and what follows from it. The tables are calculated from the database when the report renders.
+
+The data describes one player and is simulated, but the fixtures follow Chelsea's real calendar from `r fmt_day(min(daily$date))` to `r fmt_day(max(daily$date))`.
+
+## Summary of decisions
+
+| Decision | Choice |
+|---|---|
+| [Days without a session](#days-without-a-session) | Load metrics are missing (NA), not zero; rolling totals count them as zero load |
+| [Availability](#availability) | Not modelled: injury and availability dates are not in the data |
+| [Match-day labels](#match-day-labels) | Hybrid: MD+1 and MD+2 after a match, MD-1 always before one, a countdown in between |
+| [Extended gaps](#extended-gaps) | Labelled, but given no adaptive range |
+| [MD-5](#md-5) | Kept as its own label, accepting a wider range |
+| [Match-day duration band](#match-day-duration-band) | Matches lasting 85 to 125 minutes are full matches: the match-day reference. Other match days are kept, with no load range |
+| [Per-minute values](#per-minute-values) | Distance, speed bands and efforts per minute, as measures of intensity |
+| [Load baseline](#load-baseline) | The full `r baseline_season` season |
+| [Recovery baseline](#recovery-baseline) | July to December 2023, with at least 5 values needed for a range |
+
+## Days without a session
+
+**Decision.** On days with no GPS session, every load metric is set to missing (NA) rather than kept as zero. A `has_session` flag records which days had a session.
+
+**Options considered.** Keep the zeros as supplied; drop the days entirely; set them to missing.
+
+**Why.** GPS has a row for every calendar day, and `r fmt_n(n_off)` of the `r fmt_n(nrow(daily))` days are rows of zeros. Kept as zeros, they pull every average down; dropped, the calendar has holes that rolling windows and joins have to work around. Setting the metrics to missing keeps every date while letting averages and ranges use session days only.
+
+```{r}
+#| label: zero-effect
+tibble(
+  Measure = c("Mean distance per day, zeros included", "Mean distance per session, days off excluded"),
+  `Distance (m)` = fmt_n(round(c(sum(sessions$distance) / nrow(daily), mean(sessions$distance))))
+) |> kable_md(align = "lr")
+```
+
+**Consequence.** Staging keeps the zeros exactly as supplied, so the rule can be traced and reversed. Rolling 7- and 28-day load totals, built later, deliberately count a day without a session as zero load, because rest is part of the load picture.
+
+## Availability
+
+**Decision.** Days without a session are not split into days off and days unavailable.
+
+**Options considered.** Infer unavailability from long runs of zeros (for example, more than seven days, or any run that includes a match day); or treat every day without a session the same way.
+
+**Why.** The data has no injury or availability dates, so any split would be a guess. The clearest case is a block of `r sum(daily$date >= as.Date("2025-03-14") & !daily$has_session)` days without a session from 14 March 2025, which includes match days and probably reflects unavailability, but nothing in the data confirms it.
+
+**Consequence.** Rolling totals treat every day without a session as rest, including that block. This is a known limitation, stated wherever rolling load is shown.
+
+## Match-day labels
+
+**Decision.** Each day gets a hybrid match-day label (`match_day`), with `match_day_order` to sort it:
+
+- **MD:** match day
+- **MD-1:** the day before a match, always, even in a three-day turnaround
+- **MD+1, MD+2:** the two days after a match
+- **MD-5 to MD-2:** the days in between, counting down to the next match
+- **Extended gap:** anything further from a match
+
+**Why a label is needed.** Training has a different objective on each day of the match week, so a session can only be judged against sessions with the same purpose. Each day in the file has two codes, days since the last match and days to the next, and a label has to choose between them. That choice matters because this player's weeks are rarely standard:
+
+```{r}
+#| label: gaps
+match_dates <- daily$date[daily$is_match_day]
+gaps <- as.numeric(diff(match_dates))
+tibble(gap = cut(gaps, c(0, 3, 4, 5, 6, 7, 8, 10, Inf), labels = c("3", "4", "5", "6", "7", "8", "9 to 10", "11 or more"))) |>
+  count(gap, .drop = FALSE) |>
+  pivot_wider(names_from = gap, values_from = n) |>
+  mutate(`Days between matches` = "Number of gaps", .before = 1) |>
+  kable_md()
+```
+
+Three- and four-day turnarounds make up `r pct(sum(gaps <= 4), length(gaps))` of gaps, and a standard seven-day week is uncommon.
+
+**Why the hybrid.** Counting only forward from the last match would group the day before a match in a three-day turnaround with a normal-week MD+2, a recovery or off day; counting only back would do the reverse. The hybrid keeps each label to a single purpose, matches how staff describe the week, and still leaves every label with enough sessions for a range. The order of the rules matters: the day-before-a-match rule is applied before the days-after rule, so in a three-day turnaround the second day is MD-1, not MD+2.
+
+```{r}
+#| label: label-counts
+daily |>
+  mutate(match_day = factor(match_day, levels = label_levels)) |>
+  group_by(Label = match_day) |>
+  summarise(
+    Days = n(),
+    Sessions = sum(has_session),
+    `Baseline sessions` = sum(has_session & is_baseline_season),
+    `Adaptive range` = if_else(first(has_range), "Yes", "No"),
+    .groups = "drop"
+  ) |>
+  kable_md(align = "lrrrl")
+```
+
+A congested run from August 2022 shows the labels in practice:
+
+```{r}
+#| label: example-week
+daily |>
+  filter(date >= as.Date("2022-08-27"), date <= as.Date("2022-09-03")) |>
+  transmute(Date = fmt_day(date, "%b"), `Days since last match` = md_plus_code,
+            `Days to next match` = md_minus_code, Label = match_day) |>
+  kable_md(align = "lrrl")
+```
+
+**Consequence.** Every adaptive range is calculated per metric and per label. The raw codes stay in the table, so a different rule could be applied later without reloading anything.
+
+## Extended gaps
+
+**Decision.** Days six or more from the next match, outside the two days after a match, are labelled "Extended gap" and get no adaptive range (`has_range` is false).
+
+**Why.** These `r fmt_n(sum(sessions$match_day == "Extended gap"))` sessions (`r pct(sum(sessions$match_day == "Extended gap"), nrow(sessions))` of all sessions) come from pre-season, international breaks, the mid-season World Cup break and the end of a season. Their purposes vary too much for one "normal" range to mean anything.
+
+**Consequence.** Extended-gap sessions still appear in timelines and rolling load, but the tool shows them without a normal-range judgement.
+
+## MD-5
+
+**Decision.** MD-5 stays as its own label rather than being folded into MD-4.
+
+**Why.** MD-5 only occurs in longer gaps between matches, so it is rare: `r sum(sessions$match_day == "MD-5")` sessions in total, `r sum(sessions$match_day == "MD-5" & sessions$is_baseline_season)` of them in the baseline season. Folding it into MD-4 would give a narrower range, but by mixing sessions that may have different objectives.
+
+**Consequence.** MD-5 ranges start wide and narrow as sessions accumulate. The method's predictive interval widens automatically when evidence is thin, so this is handled without special cases.
+
+## Match-day duration band
+
+**Decision.** Match days lasting 85 to 125 minutes are treated as full matches (`is_full_match`). They are the match-day reference: only they get a load range on match days (`has_load_range`), and they define a typical full match (`features.match_reference`). Other match days keep the MD label and every other feature; they are compared with a full match as a percentage instead of against a range. Recovery is unaffected, because it does not depend on how long the player played.
+
+**Why a band is needed.** On match days, load depends mostly on how long the player was on the pitch, and the data has no minutes played or starter flag. Without a band, the match-day range mixes full matches with short substitute appearances, so it becomes too wide to flag anything:
+
+```{r}
+#| label: match-durations
+md <- filter(sessions, is_match_day)
+tibble(gap = cut(md$day_duration, c(0, 30, 45, 60, 75, 85, 100, 125, 200),
+                 labels = c("Under 30", "30-45", "45-60", "60-75", "75-85", "85-100", "100-125", "Over 125"))) |>
+  count(gap, .drop = FALSE) |>
+  pivot_wider(names_from = gap, values_from = n) |>
+  mutate(`Match-day duration (min)` = "Matches", .before = 1) |>
+  kable_md()
+```
+
+**Why duration cannot identify starts directly.** Durations run from `r round(min(md$day_duration))` to `r round(max(md$day_duration))` minutes with no gap between starts and substitute appearances. They also do not follow real match length: the 2024 League Cup final against Liverpool (25 February 2024) went to extra time but records `r round(md$day_duration[md$date == as.Date("2024-02-25")])` minutes, while the longest recordings come from ordinary 90-minute league and European matches. Duration is therefore either simulated or includes time outside the match, such as warm-ups. It still tracks distance closely (correlation `r round(cor(md$day_duration, md$distance), 2)`), so within the data a duration band does pick out the longer appearances.
+
+**Options considered.** All match days; 80 to 130, 85 to 125, 90 to 120 and 90 to 105 minutes.
+
+```{r}
+#| label: match-bands
+band <- function(lo, hi) {
+  x <- filter(md, day_duration >= lo, day_duration <= hi)
+  tibble(`Duration band` = if (lo == 0) "All match days" else paste(lo, "to", hi, "min"),
+         Matches = nrow(x),
+         `Per season` = paste(table(factor(x$season, levels = sort(unique(md$season)))), collapse = " / "),
+         `Median distance (km)` = round(median(x$distance) / 1000, 1),
+         `10th-90th percentile (km)` = paste(round(quantile(x$distance, c(0.1, 0.9)) / 1000, 1), collapse = " to "),
+         `Distance per minute` = round(median(x$distance / x$day_duration)))
+}
+bind_rows(band(0, 1000), band(80, 130), band(85, 125), band(90, 120), band(90, 105)) |>
+  kable_md(align = "lrlrrr")
+```
+
+**Why 85 to 125 minutes.** Any band roughly halves the spread of match-day distance. This one keeps `r sum(md$is_full_match)` matches, at least `r min(table(md$season[md$is_full_match]))` in every season, so the 2022/23 baseline still has enough full matches. It excludes short appearances, whose per-minute values are inflated, and the implausibly long recordings.
+
+**Consequence.** Every session carries `pct_of_match`: its value as a share of a typical full match in the same season. A substitute appearance has no adaptive range but can still be read, for example as half a full match's distance in a fifth of the time. Training days can be read the same way, such as MD-1 as a share of a match.
+
+## Per-minute values
+
+**Decision.** Distance, the three speed bands and the three acceleration bands are also expressed per minute of session duration (`*_per_min`), and treated as load metrics in their own right, with adaptive ranges.
+
+**Why.** Totals mix volume and intensity: a long, easy session and a short, hard one can produce the same distance. Dividing by duration separates them, and makes sessions and appearances of different lengths comparable. Short match appearances show why both views matter:
+
+```{r}
+#| label: per-minute
+md |>
+  mutate(Duration = cut(day_duration, c(0, 45, 85, 125, 200), labels = c("Under 45 min", "45-85 min", "85-125 min (full match)", "Over 125 min"))) |>
+  group_by(Duration) |>
+  summarise(Matches = n(),
+            `Median distance (km)` = round(median(distance) / 1000, 1),
+            `Distance per minute` = round(median(distance_per_min)),
+            `High-speed running per minute` = round(median(distance_over_21_per_min), 1),
+            .groups = "drop") |>
+  kable_md(align = "lrrrr")
+```
+
+**Consequence.** Duration may include time outside the session itself, such as warm-ups, so per-minute values understate true intensity. They are consistent across the data, so comparisons within it hold, but they should not be compared with other teams' per-minute figures. Like the totals, they are modelled on the log scale for the adaptive ranges; the reasoning is in the adaptive ranges report.
+
+## Load baseline
+
+**Decision.** The full `r baseline_season` season is the baseline: it sets the starting point for every load range and gets no flags itself (`is_baseline_season`).
+
+**Options considered.** The first half of `r baseline_season` only; the full season.
+
+**Why.** Half a season leaves the middle of the week too thin to estimate a typical spread, and the first half of `r baseline_season` also contains the mid-season World Cup break:
+
+```{r}
+#| label: baseline-counts
+base <- sessions |>
+  filter(is_baseline_season, has_range) |>
+  mutate(match_day = factor(match_day, levels = setdiff(label_levels, "Extended gap")))
+bind_rows(
+  base |> filter(date < as.Date("2023-01-01")) |> count(match_day, .drop = FALSE) |> mutate(period = "First half only"),
+  base |> count(match_day, .drop = FALSE) |> mutate(period = "Full season")
+) |>
+  pivot_wider(names_from = match_day, values_from = n) |>
+  rename(`Baseline period` = period) |>
+  kable_md()
+```
+
+**Consequence.** Flags start in 2023/24. The 2022/23 season had three head coaches, so its training may not represent later seasons; the adaptive ranges limit how much weight the baseline carries, which is covered with the range method.
+
+## Recovery baseline
+
+**Decision.** Recovery data starts in July 2023, after the load baseline season, so recovery gets its own baseline: July to `r fmt_day(recovery_baseline_end)`. A metric needs at least 5 baseline values on a match-day label to get a range there; otherwise it shows "building baseline".
+
+**Why.** There is no earlier season to learn from, and recovery is not collected every day, so some label and metric combinations are thin. For the overall recovery score:
+
+```{r}
+#| label: recovery-baseline
+rec |>
+  filter(metric == "emboss_baseline_score", !is.na(value), date <= recovery_baseline_end) |>
+  inner_join(select(daily, date, match_day, has_range), by = "date") |>
+  filter(has_range) |>
+  mutate(match_day = factor(match_day, levels = setdiff(label_levels, "Extended gap"))) |>
+  count(match_day, .drop = FALSE) |>
+  mutate(Range = if_else(n >= 5, "Yes", "Building baseline")) |>
+  rename(Label = match_day, `Baseline values` = n) |>
+  kable_md(align = "lrl")
+```
+
+**Consequence.** Recovery flags start in January 2024. Combinations below the minimum, notably match day, gain a range once enough values accumulate.
+
+::: {.md-source}
+Data: CFC Insights Vizathon 2025, Chelsea FC Performance Insights (simulated data for one player). Raw files are downloaded from the public competition repository, not stored here, and loaded into the project's DuckDB database before this report runs.
+:::

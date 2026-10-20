@@ -1,0 +1,38 @@
+/*-- scss:defaults --*/
+// Slate and Signal, report version (light only)
+$body-bg: #FFFFFF;
+$body-color: #1F2A37;
+$text-muted: #636D7A;
+$primary: #007A7A;
+$link-color: #007A7A;
+$border-color: #D9DEE4;
+$font-family-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+$headings-font-weight: 600;
+$headings-color: #1F2A37;
+$font-size-base: 1rem;
+$line-height-base: 1.6;
+$code-bg: #F5F7F9;
+
+/*-- scss:rules --*/
+h1.title { font-size: 2.1rem; letter-spacing: -0.02em; }
+.subtitle, .quarto-title .subtitle { color: #4E5866; }
+h2 { font-size: 1.45rem; letter-spacing: -0.01em; margin-top: 2.25rem; padding-bottom: .3rem; border-bottom: 1px solid #D9DEE4; }
+h3 { font-size: 1.1rem; }
+table { font-size: .9rem; font-variant-numeric: tabular-nums; }
+thead th { color: #4E5866; font-weight: 600; border-bottom: 1px solid #B8C0C9 !important; }
+td { vertical-align: top; }
+code { color: #1F2A37; background: #F5F7F9; }
+
+.md-stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .8rem; margin: 1rem 0 1.5rem; }
+.md-stat { background: #F5F7F9; border-radius: 10px; padding: .9rem 1rem; }
+.md-stat .v { display: block; font-size: 1.7rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: #1F2A37; font-variant-numeric: tabular-nums; }
+.md-stat .v.signal { color: #007A7A; }
+.md-stat .l { display: block; margin-top: .25rem; color: #4E5866; font-size: .85rem; }
+
+.status { white-space: nowrap; font-weight: 600; }
+.status::before { content: ""; display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; margin-right: .4rem; vertical-align: .05rem; }
+.status.pass::before { background: #2E9E5B; }
+.status.note::before { background: #B8C0C9; }
+.status.issue::before { background: #D64545; }
+
+.md-source { color: #636D7A; font-size: .85rem; margin-top: 2.5rem; }

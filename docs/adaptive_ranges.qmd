@@ -1,0 +1,410 @@
+---
+title: "Adaptive ranges"
+subtitle: "How the tool decides whether a session or recovery score is normal for this player"
+author: "Michael Davies"
+date: today
+date-format: "D MMMM YYYY"
+format:
+  html:
+    theme: [default, md-report.scss]
+    embed-resources: true
+    toc: true
+    toc-title: "Contents"
+    toc-location: right
+    fig-width: 8
+    fig-height: 3.6
+    fig-dpi: 160
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+})
+for (f in list.files(here::here("utils"), pattern = "\\.R$", full.names = TRUE)) source(f, encoding = "UTF-8")
+knitr::opts_chunk$set(dev = "ragg_png")
+
+db <- with_db(read_only = TRUE, function(con) list(
+  daily = db_read(con, "features", "daily_load"),
+  glossary = db_read(con, "reference", "gps_glossary"),
+  events = db_read(con, "reference", "events")
+))
+daily <- db$daily
+glossary <- db$glossary
+events <- db$events
+load_metrics <- glossary |> filter(is_metric) |> arrange(display_order)
+fmt_n <- function(x) format(x, big.mark = ",")
+pct <- function(x, y) paste0(round(100 * x / y), "%")
+kable_md <- function(df, align = NULL) knitr::kable(df, format = "html", align = align)
+
+# Settings used throughout. They are the decisions recorded below.
+reset_weight <- range_settings$reset_weight   # what past sessions count for after a known change
+interval <- range_settings$interval            # width of the normal range
+label_levels <- daily |> distinct(match_day, match_day_order) |> arrange(match_day_order) |> pull(match_day)
+```
+
+```{r}
+#| label: method
+# The method itself is adaptive_range() in utils/adaptive_ranges.R, the same function the
+# pipeline uses to build monitoring.load_ranges, so this report and the app agree.
+# The helpers below re-run it with different settings for the comparisons in this report.
+
+# Runs the method for one metric across every match-day label that gets a range.
+# offset: the metric's log offset from the GPS glossary, so the model works on
+# log(value + offset); NA means the metric is modelled as recorded.
+# The range is converted back to real units.
+ranges_for_metric <- function(daily, metric, offset = glossary$log_offset[glossary$column_name == metric],
+                              known_events = events) {
+  daily |>
+    filter(has_session, has_load_range) |>
+    select(date, season, is_baseline_season, match_day, value = all_of(metric)) |>
+    arrange(match_day, date) |>
+    group_by(match_day) |>
+    group_modify(function(d, key) {
+      r <- adaptive_range(to_model_scale(d$value, offset), d$is_baseline_season, d$date, known_events)
+      bind_cols(d, mutate(r, across(c(typical, lower, upper), ~ from_model_scale(.x, offset))))
+    }) |>
+    ungroup() |>
+    mutate(flag = case_when(is.na(lower) ~ NA_character_,
+                            value > upper ~ "Above range",
+                            value < lower ~ "Below range",
+                            TRUE ~ "In range"))
+}
+
+hsr <- ranges_for_metric(daily, "distance_over_21")
+assessed <- filter(hsr, !is.na(flag))
+
+flag_summary <- function(res) {
+  res <- filter(res, !is.na(flag))
+  tibble(n = nrow(res), flagged = mean(res$flag != "In range"),
+         above = mean(res$flag == "Above range"), below = mean(res$flag == "Below range"))
+}
+
+# z-score comparison: the same sessions scored against past sessions of the same label,
+# with the past mean and SD treated as known, flagged beyond the 90% normal cut-off
+z_flags <- function(y, assess, window = Inf) {
+  cut <- qnorm(1 - (1 - interval) / 2)
+  vapply(seq_along(y), function(k) {
+    if (!assess[k]) return(NA_character_)
+    past <- y[seq_len(k - 1)]
+    if (is.finite(window)) past <- tail(past, window)
+    z <- (y[k] - mean(past)) / sd(past)
+    if (z > cut) "Above range" else if (z < -cut) "Below range" else "In range"
+  }, character(1))
+}
+```
+
+The load monitoring tool has to answer one question quickly: is this session, or this recovery score, normal for this player? This report sets out how that is decided. Each value is compared with a range built from the player's own history, which updates after every session. The method follows Roshan et al. (2021), adapted for one player. The worked example uses high-speed running and is calculated from the data when the report renders.
+
+## Summary of decisions
+
+| Decision | Choice |
+|---|---|
+| [What gets a range](#what-gets-a-range) | Each metric on each match-day label, independently |
+| [Starting point](#starting-point) | Load: the 2022/23 baseline season. Recovery: July to December 2023 |
+| [Known changes](#known-changes-seasons-and-managers) | At each new season or new head coach, past sessions are cut to count as `r reset_weight` sessions |
+| [Range width](#range-width) | `r round(100 * interval)`% predictive interval |
+| [Scale](#scale) | log(value + offset), with the offset set to 25% of the metric's typical baseline session, so ranges work in ratios rather than fixed amounts; peak speed and recovery as recorded |
+| [Adaptive range or z-score](#adaptive-range-or-z-score) | Adaptive range for flags, with a standardised score shown alongside |
+| [Minimum history](#minimum-history) | Load: always enough baseline sessions. Recovery: at least 5 baseline values |
+| [What isn't ranged](#what-isnt-ranged) | Extended-gap days, match days outside 85 to 125 minutes, and the baseline period itself |
+
+## The method
+
+### Where it comes from
+
+Roshan et al. (2021) compared ways of building adaptive reference ranges for people monitored over time. A static range compares everyone with the same limits; an adaptive range compares each person with their own history, so a value can be unusual for one person and normal for another. Their approach models each person's typical value and variability, and flags a new value when it falls outside the range their next value would be expected to fall in: the predictive interval.
+
+In the paper, each person's typical value is also linked to a group average, so people with little data borrow strength from everyone else. With one player there is no group to borrow from, so this tool keeps the individual part of the method and replaces the group with the player's own earlier data: a baseline period sets the starting point, and each session updates it.
+
+### Step by step
+
+Each unit (one metric on one match-day label, such as high-speed running on MD-2) is handled on its own.
+
+1. **Starting point.** From the unit's baseline sessions, take the mean (what's typical), the variance (how much it normally varies), and the number of sessions, capped at `r reset_weight`. The cap sets how much the starting point counts, in sessions.
+2. **Range for the next session.** The predictive range is the mean plus or minus a Student-*t* multiplier × the spread × √(1 + 1 / weight). With little evidence the multiplier and the √ term are large, so the range is wide; both shrink as sessions accumulate.
+3. **Judge the session.** Above the range, below it, or in range. The session's own value never affects its own range. The tool also shows a standardised score: how many predictive spreads the session sits from its typical value, read like a z-score.
+4. **Update.** The session is added to the unit's history with the standard normal-inverse-gamma update: the new mean is a weighted average of the old mean and the new value, and the spread absorbs how far the value was from what was expected. Only a few running quantities are needed: the typical value, the spread and the weight.
+5. **Known changes.** When a new season starts or a new head coach arrives, the history's weight is cut back to `r reset_weight` sessions. The previous picture of normal is kept as the starting point, but the range widens and the new period's sessions soon take over.
+
+## Worked example: high-speed running
+
+High-speed running (distance above 21 km/h) is the tool's lead load measure. These are its ranges on MD-2 from 2023/24 onwards. Each point is a session; the band is the range the session was judged against, built only from earlier sessions.
+
+```{r}
+#| label: example-md2
+#| fig-height: 3.8
+#| fig-alt: "High-speed running on MD-2 sessions from August 2023, with the adaptive normal range as a shaded band. Most sessions fall inside the band; a few above or below it are highlighted."
+ex <- filter(assessed, match_day == "MD-2")
+n_out <- sum(ex$flag != "In range")
+ggplot(ex, aes(date)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = md_colours$signal_soft) +
+  geom_line(aes(y = typical), colour = md_colours$signal, linewidth = 0.5) +
+  geom_point(data = filter(ex, flag == "In range"), aes(y = value), colour = md_colours$ink_muted, size = 1.8) +
+  geom_point(data = filter(ex, flag != "In range"), aes(y = value, shape = flag), colour = md_colours$alert, fill = md_colours$alert, size = 2.6) +
+  scale_shape_manual(values = c(`Above range` = 17, `Below range` = 25), name = NULL) +
+  scale_y_continuous(labels = scales::label_comma(suffix = " m")) +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "3 months") +
+  labs(
+    title = sprintf("%d of %d MD-2 sessions fell outside the player's normal range", n_out, nrow(ex)),
+    subtitle = sprintf("High-speed running (>21 km/h) per MD-2 session. Band: %d%% adaptive range; line: typical value", round(100 * interval)),
+    x = NULL, y = NULL, caption = "Source: CFC Insights Vizathon 2025 (simulated data)"
+  ) +
+  theme_md(base_size = 11) +
+  theme(legend.position = "top", legend.justification = "left")
+```
+
+The band is not symmetric: it extends further above the typical value than below it, because the range is built on the log scale (see [Scale](#scale)). It also moves as the player's sessions change, rather than staying fixed at the baseline.
+
+Across all match-day labels, the share of high-speed running sessions flagged is close to what a `r round(100 * interval)`% range should give, about one in ten. Labels with fewer sessions vary more around that rate:
+
+```{r}
+#| label: flag-rates
+assessed |>
+  mutate(match_day = factor(match_day, levels = label_levels)) |>
+  group_by(Label = match_day) |>
+  summarise(
+    Sessions = n(),
+    `Above range` = sum(flag == "Above range"),
+    `Below range` = sum(flag == "Below range"),
+    `Flagged` = pct(sum(flag != "In range"), n()),
+    `Typical range width (m)` = fmt_n(round(median(upper - lower))),
+    .groups = "drop"
+  ) |>
+  kable_md(align = "lrrrrr")
+```
+
+Overall, `r pct(sum(assessed$flag != "In range"), nrow(assessed))` of `r fmt_n(nrow(assessed))` assessed sessions were flagged.
+
+## Decisions
+
+### What gets a range
+
+**Decision.** Each metric on each match-day label gets its own range, calculated independently.
+
+**Options considered.** Independent ranges; partial pooling, where each label's range borrows strength from the player's other days, as the paper does across people.
+
+**Why.** Each day of the match week has a different training objective, so an MD-1 session should not be pulled towards what is typical on MD-4. Borrowing strength between labels would blur exactly the differences the tool needs to see.
+
+**Consequence.** Labels with few sessions, such as MD-5, start with wide ranges and narrow over time instead of borrowing precision from other days.
+
+### Starting point
+
+**Decision.** Load ranges start from the full 2022/23 season. Recovery data begins in July 2023, so recovery ranges start from July to December 2023. The baseline periods set the starting point and are not flagged themselves. The reasoning for both periods is in the feature engineering report.
+
+### Known changes: seasons and managers
+
+**Decision.** Season starts and head-coach changes are recorded as known events (`input/reference/events.csv`). At each one, the weight of a unit's history is cut to `r reset_weight` sessions. Between events, every session counts fully and the history grows. When events coincide, the strongest cut applies.
+
+**Options considered.** Let all history count fully; use a rolling window, such as the last 20 sessions; down-weight older sessions continuously; cut the history's weight at known changes, and by how much.
+
+**Why.** Training changes when the season or the coach changes: this player's data covers five head coaches. A new coach brings a different way of training, so sessions in the first weeks look unusual against the old picture of normal. Those flags describe the coach's sessions, not the player, so the range should widen when a change is known. A full manager-by-day model, with separate ranges for each coach, is not possible with one player: Frank Lampard had 11 matches, so some combinations would have two or three sessions. Cutting the weight at a known change is the standard alternative in Bayesian monitoring, an intervention: the method does not claim to know how the change alters training, only that its confidence in "normal" should drop. Continuous down-weighting of older sessions was not needed: between events, the history only ever covers one season under one coach.
+
+The two head-coach changes after the baseline fall on the same days as season starts (1 July 2023 and 1 July 2024), so in this data the events act together. The two changes inside the 2022/23 baseline are recorded but have no effect, because the baseline is summarised as a whole. How strong the cut should be:
+
+```{r}
+#| label: reset-comparison
+reset_rows <- function(metric) {
+  bind_rows(lapply(c(20, 10, 5), function(w) {
+    ev <- mutate(events, reset_weight = w)
+    res <- ranges_for_metric(daily, metric, known_events = ev) |>
+      filter(!is.na(flag)) |>
+      group_by(match_day, season) |>
+      mutate(early = row_number() <= 5) |>
+      ungroup()
+    tibble(
+      `Cut to` = if (w == reset_weight) paste(w, "sessions (chosen)") else paste(w, "sessions"),
+      Flagged = scales::percent(mean(res$flag != "In range"), 0.1),
+      `Above / below` = paste(scales::percent(mean(res$flag == "Above range"), 0.1), "/",
+                              scales::percent(mean(res$flag == "Below range"), 0.1)),
+      `First 5 sessions of a season` = scales::percent(mean(res$flag[res$early] != "In range"), 0.1),
+      `Rest of the season` = scales::percent(mean(res$flag[!res$early] != "In range"), 0.1)
+    )
+  }))
+}
+bind_rows(
+  reset_rows("distance_over_21") |> mutate(Metric = "High-speed running", .before = 1),
+  reset_rows("distance") |> mutate(Metric = "Total distance", .before = 1)
+) |>
+  kable_md(align = "llrrrr")
+```
+
+A cut to `r reset_weight` sessions brings both lead metrics closest to one session in ten flagged and trims the extra flags at the start of a season. Cutting to 5 removes the early excess for total distance but leaves ranges too wide for too long, so fewer than one in ten sessions are flagged overall.
+
+**Consequence.** One rule covers both kinds of change, and adding another, such as a return from a long injury, is one row in the events file. A season without a new coach is treated the same way as one with: pre-season changes fitness and training too.
+
+### Range width
+
+**Decision.** `r round(100 * interval)`% predictive intervals.
+
+**Options considered.** 90% or 95%.
+
+**Why.** A 95% range flags about one session in twenty, which suits an alarm. The tool is for monitoring: staff want to see sessions worth a second look, and a 90% range flags about one in ten.
+
+**Consequence.** Flags are a prompt to look, not a warning. The app describes them as "outside the usual range for this day", not as a risk.
+
+### Adaptive range or z-score
+
+**Decision.** Flags come from the adaptive range. The app also shows a standardised score, (value − typical value) ÷ predictive spread, which reads like a z-score.
+
+**Options considered.** A z-score against past sessions of the same label, using all previous sessions or only the last 20; the adaptive range.
+
+**Why.** A z-score treats the past mean and standard deviation as exactly known. With 10 to 20 past sessions they are only estimates, so a cut-off meant to flag one session in ten flags more, and most of the extra flags come early in each season when the evidence is thinnest. A z-score over all history also never forgets old seasons, so after training changes, sessions keep looking unusual. The adaptive range allows for both. Roshan et al. note that a z-score corrected for estimating the mean and spread follows a Student-*t* distribution: the adaptive range is that corrected z-score, plus a starting point and a cap on old history.
+
+```{r}
+#| label: z-comparison
+z_compare <- function(metric) {
+  off <- glossary$log_offset[glossary$column_name == metric]
+  to_model <- if (is.na(off)) identity else function(x) log(x + off)
+  res <- ranges_for_metric(daily, metric) |>
+    arrange(match_day, date) |>
+    group_by(match_day) |>
+    mutate(assess = !is.na(flag),
+           z_all = z_flags(to_model(value), assess),
+           z_20 = z_flags(to_model(value), assess, window = 20)) |>
+    group_by(match_day, season) |>
+    mutate(early = row_number() <= 5) |>
+    ungroup() |>
+    filter(assess)
+  summarise_method <- function(col, name) tibble(
+    Method = name,
+    Flagged = scales::percent(mean(res[[col]] != "In range"), 0.1),
+    `First 5 sessions of a season` = scales::percent(mean(res[[col]][res$early] != "In range"), 1),
+    `Rest of the season` = scales::percent(mean(res[[col]][!res$early] != "In range"), 1),
+    `Same flag as adaptive` = if (col == "flag") "" else scales::percent(mean(res[[col]] == res$flag), 0.1)
+  )
+  bind_rows(summarise_method("flag", "Adaptive range"),
+            summarise_method("z_all", "z-score, all history"),
+            summarise_method("z_20", "z-score, last 20 sessions"))
+}
+bind_rows(
+  z_compare("distance_over_21") |> mutate(Metric = "High-speed running", .before = 1),
+  z_compare("distance") |> mutate(Metric = "Total distance", .before = 1)
+) |>
+  kable_md(align = "llrrrr")
+```
+
+**Consequence.** The two approaches agree on about 95% of sessions, so staff who think in z-scores see familiar numbers, but the adaptive range flags fewer sessions overall. Every method flags more at the start of a season, when training patterns are changing; the adaptive range flags the least.
+
+### Scale
+
+**Decision.** Load metrics are modelled as log(value + offset), where the offset is 25% of the metric's typical (median) session in the baseline season. Peak speed and the recovery scores are modelled as recorded. Each metric's offset is stored in the GPS glossary (`log_offset`), so it is visible and can be changed.
+
+**Options considered.** No transform; log(value + 1); log(value + offset) with an offset scaled to each metric.
+
+**Why a transform is needed.** The range is a Student-*t* interval: a typical value plus or minus a multiple of the spread. That assumes values scatter symmetrically around the typical value, by about the same amount whatever the typical value is. Load metrics break both assumptions:
+
+- **They are bounded at zero and skewed to the right.** A session can sit far above the typical value but never far below it, because it cannot go below zero.
+- **Their variation is proportional, not fixed.** A day that typically produces 500 m of high-speed running varies by hundreds of metres; a day that typically produces 100 m varies by tens.
+
+On the raw scale, a symmetric range puts its lower limit near or below zero, so low sessions can almost never be flagged, while the long right tail produces too many flags above.
+
+**Why a log.** On the log scale, differences become ratios: 200 m against 100 m is the same step as 400 m against 200 m. "Double the usual" then means the same thing on every day and for every metric, which is how practitioners already describe load ("30% above normal"). The spread becomes roughly symmetric and stable, which is what the interval needs, and when the range is converted back to real units it is asymmetric, reaching further above the typical value than below it and never below zero.
+
+**Why an offset, and why not 1.** A log needs an offset because some sessions record zero distance in a speed band, and log(0) is undefined. The size of the offset also matters: it sets where the scale stops treating differences as proportional. Below the offset, differences behave roughly as fixed amounts; above it, as ratios. With an offset of 1, 5 m and 10 m of high-speed running look as far apart as 100 m and 200 m, so the many near-zero training sessions inflated the spread, ranges became very wide on the upper side, and almost only near-zero sessions were flagged. An offset in proportion to the metric's own scale keeps the log's benefit without that distortion.
+
+**Why 25% of the typical session.** Tying the offset to each metric's typical baseline session makes one rule work for metres, counts and minutes alike. The 25% is a calibrated choice rather than a derived one. A `r round(100 * interval)`% range should flag about one session in ten, split evenly between above and below. Across the metrics, 25% kept the overall rate close to one in ten while giving the most even split; smaller offsets flag slightly fewer sessions, but more of them below the range, which is the near-zero problem returning. For the two lead metrics:
+
+```{r}
+#| label: scale-comparison
+scale_rows <- function(metric) {
+  off <- glossary$log_offset[glossary$column_name == metric]
+  bind_rows(
+    flag_summary(ranges_for_metric(daily, metric, offset = NA)) |> mutate(Scale = "As recorded"),
+    flag_summary(ranges_for_metric(daily, metric, offset = 1)) |> mutate(Scale = "log(value + 1)"),
+    flag_summary(ranges_for_metric(daily, metric, offset = off)) |> mutate(Scale = sprintf("log(value + %s), chosen", format(off)))
+  )
+}
+bind_rows(
+  scale_rows("distance_over_21") |> mutate(Metric = "High-speed running"),
+  scale_rows("distance") |> mutate(Metric = "Total distance")
+) |>
+  transmute(Metric, Scale, Flagged = scales::percent(flagged, 0.1),
+            `Above / below` = paste(scales::percent(above, 0.1), "/", scales::percent(below, 0.1))) |>
+  kable_md(align = "llrr")
+```
+
+With the chosen offsets, every load metric flags close to the intended rate:
+
+```{r}
+#| label: all-metrics
+load_metrics |>
+  rowwise() |>
+  mutate(res = list(flag_summary(ranges_for_metric(daily, column_name)))) |>
+  ungroup() |>
+  tidyr::unnest(res) |>
+  transmute(Metric = label,
+            Scale = if_else(is.na(log_offset), "As recorded",
+                            paste0("log(value + ", vapply(log_offset, format, character(1), scientific = FALSE), ")")),
+            Sessions = fmt_n(n), Flagged = scales::percent(flagged, 0.1),
+            `Above / below` = paste(scales::percent(above, 0.1), "/", scales::percent(below, 0.1))) |>
+  kable_md(align = "llrrr")
+```
+
+```{r}
+#| label: offset-robustness-calc
+base_medians <- daily |>
+  filter(has_session, has_load_range, is_baseline_season) |>
+  summarise(across(all_of(load_metrics$column_name), median)) |>
+  pivot_longer(everything(), names_to = "column_name", values_to = "baseline_median")
+robustness <- load_metrics |>
+  filter(!is.na(log_offset)) |>
+  left_join(base_medians, by = "column_name") |>
+  rowwise() |>
+  mutate(
+    `10%` = flag_summary(ranges_for_metric(daily, column_name, offset = 0.10 * baseline_median))$flagged,
+    `25% (chosen)` = flag_summary(ranges_for_metric(daily, column_name))$flagged,
+    `50%` = flag_summary(ranges_for_metric(daily, column_name, offset = 0.50 * baseline_median))$flagged
+  ) |>
+  ungroup()
+rob_range <- range(unlist(select(robustness, `10%`, `25% (chosen)`, `50%`)))
+```
+
+**The choice is not fragile.** With the offset set anywhere from 10% to 50% of the typical session, every metric flags between `r scales::percent(rob_range[1], 1)` and `r scales::percent(rob_range[2], 1)` of sessions:
+
+```{r}
+#| label: offset-robustness
+robustness |>
+  transmute(Metric = label, across(c(`10%`, `25% (chosen)`, `50%`), ~ scales::percent(.x, 0.1))) |>
+  kable_md(align = "lrrr")
+```
+
+**Alternatives not taken.** A Box-Cox transform would let the data choose the shape of the curve for each metric, and a skewed distribution such as the log-normal or gamma could be modelled directly. Both are more complex to explain and to maintain. The log with an offset keeps the conjugate update, so each range follows from a few running quantities and stays fast and transparent.
+
+**Per-minute values are transformed too.** They are rates rather than amounts, but they are still bounded at zero and right-skewed. Modelled as recorded, high-speed running per minute was flagged almost only above its range (10.7% above, 0.3% below); on the log scale the split is balanced. They use the same 25% rule for their offsets.
+
+**What is not transformed.** Peak speed is close to symmetric already. The recovery composites are already expressed relative to the player's norm and can be negative, so a log would not make sense.
+
+**Consequence.** The line in the worked example is the typical session, not the arithmetic average: converting a mean on the log scale back to real units gives a value close to the median, which sits below the average for skewed data. For monitoring that is the more useful reference, and the app labels it "typical". Ranges for log-scale metrics reach further above the typical value than below it. Peak speed flags less than the intended rate, mostly below the range: it is capped by how fast the player can run, so sessions rarely exceed the usual range.
+
+### Minimum history
+
+**Decision.** Recovery ranges need at least 5 baseline values on a label; below that, the tool shows "building baseline". Load needs no minimum, because every label has at least 9 baseline sessions.
+
+**Why.** The method can produce a range from very few values, but with fewer than 5 the range is so wide that it would rarely flag anything, and showing it would suggest a judgement the data cannot support.
+
+### What isn't ranged
+
+**Decision.** Extended-gap days (pre-season, international breaks, the end of a season), match days lasting less than 85 or more than 125 minutes, and the baseline periods are not judged against a range.
+
+**Why.** Extended-gap sessions have no consistent purpose to compare against. On match days, load depends on how long the player played, so only full matches (85 to 125 minutes) make a usable reference; shorter and longer match days are compared with a full match as a percentage instead. The choice of band is explained in the feature engineering report. The baseline periods are what the starting point is built from, so judging them against it would be circular.
+
+## Limitations
+
+- **One player.** The hierarchical part of the paper's method, borrowing strength across people, needs more than one player. Every table carries a player ID, so it can be added if squad data becomes available.
+- **Normality on the modelling scale.** The method assumes values are roughly normal after the log transform. Strongly bimodal metrics, such as sprint distance on days with and without sprint work, will fit less well.
+- **Simulated data.** The flag rates above show the method behaving as designed, not that it detects anything real about this player.
+
+## Reference
+
+Roshan, D., Ferguson, J., Pedlar, C. R., Simpkin, A., Wyns, W., Sullivan, F. and Newell, J. (2021). A comparison of methods to generate adaptive reference ranges in longitudinal monitoring. *PLOS ONE*, 16(2), e0247338. <https://doi.org/10.1371/journal.pone.0247338>
+
+::: {.md-source}
+Data: CFC Insights Vizathon 2025, Chelsea FC Performance Insights (simulated data for one player). Raw files are downloaded from the public competition repository, not stored here, and loaded into the project's DuckDB database before this report runs.
+:::

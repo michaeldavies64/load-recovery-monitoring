@@ -1,0 +1,2 @@
+player_id,display_name,position,date_of_birth,height_cm,weight_kg,body_fat_pct,headshot_file,note
+P01,Player 01,Right-back,2005-11-20,181,74,9.8,headshot.svg,"Invented profile for a simulated player. The physical data is simulated; the fixtures follow Chelsea's real calendar."
