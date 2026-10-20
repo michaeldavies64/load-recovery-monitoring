@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Load and recovery monitoring: reports</title>
+<style>
+  :root { --ink: #1F2A37; --ink-2: #4E5866; --signal: #007A7A; --line: #D9DEE4; }
+  body { margin: 0; background: #FFFFFF; color: var(--ink); font: 16px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 3rem auto; padding: 0 16px; }
+  h1 { font-size: 1.6rem; margin: 0 0 .5rem; letter-spacing: -0.01em; }
+  p { color: var(--ink-2); }
+  a { color: var(--signal); font-weight: 600; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul { list-style: none; padding: 0; margin: 1.5rem 0; border-top: 1px solid var(--line); }
+  li { padding: .9rem 0; border-bottom: 1px solid var(--line); }
+  li span { display: block; color: var(--ink-2); font-size: .92rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Load and recovery monitoring</h1>
+  <p>The write-ups behind the app: what was checked, how the data was shaped, and how each normal range is built. Simulated data for one player from the CFC Insights Vizathon 2025.</p>
+  <ul>
+    <li><a href="data_quality.html">Data quality</a><span>Automated checks on the raw files, and the cleaning rules that follow from them</span></li>
+    <li><a href="feature_engineering.html">Feature engineering</a><span>Match-week labels, the full-match reference, and the derived metrics</span></li>
+    <li><a href="adaptive_ranges.html">Adaptive ranges</a><span>How each session and recovery score is judged against the player's own history</span></li>
+  </ul>
+  <p><a href="https://connect.posit.cloud/michael-davies-personal/content/01a1595f-e7f0-b63f-d2cf-a1ced13e3f21">Open the app</a> · <a href="https://github.com/michaeldavies64/load-recovery-monitoring">View the code</a> · <a href="https://michaeldavies64.github.io/projects/products/load-monitoring/">Portfolio write-up</a></p>
+</main>
+</body>
+</html>
